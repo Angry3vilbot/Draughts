@@ -18,9 +18,8 @@
     <ClInclude Include="src\resource_dir.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Piece.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClInclude Include="src\Piece.h" />
+    <ClInclude Include="src\BoardLayout.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
@@ -38,11 +37,7 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Piece.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\Piece.cpp" />
   </ItemGroup>
 </Project>

@@ -7,6 +7,10 @@ class Piece
 		int getY();
 		bool getIsWhite();
 		bool getIsKing();
+
+		void setX(int x);
+		void setY(int y);
+		void setIsKing(bool isKing);
 	
 	private:
 		int x_coord;

@@ -301,6 +301,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\BoardLayout.h" />
     <ClInclude Include="src\Piece.h" />
     <ClInclude Include="src\resource_dir.h" />
   </ItemGroup>
