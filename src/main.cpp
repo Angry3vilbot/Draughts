@@ -5,6 +5,7 @@
 #include "Piece.h"
 #include "BoardLayout.h"
 #include "ValidMove.h"
+#include "AppliedMove.h"
 using namespace std;
 
 namespace Colours {
@@ -118,6 +119,47 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementSt
 			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
 	}
 }
+// Handle moving the player's selected piece
+void handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, MovementState& mov, Vector2 mousePos) {
+	Piece piece = (*board_state)[mov.index];
+	vector<ValidMove> locations = computeValidMoves(*board_state, piece);
+
+	for (ValidMove location : locations) {
+		Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
+		Vector2 squareCorner = board_layout.getSquareTopLeft(location.x, location.y);
+		Rectangle square = { squareCorner.x, squareCorner.y, board_layout.tileSize, board_layout.tileSize };
+
+		bool collisionMouseSquare = CheckCollisionPointRec(mousePos, square);
+		bool collisionPieceSquare = CheckCollisionCircleRec(pieceCenter, board_layout.pieceSize, square);
+
+		if (collisionMouseSquare || collisionPieceSquare) {
+			AppliedMove appliedMove = tryApplyMove(piece, location);
+
+			if (appliedMove.isCapture) {
+				int index;
+				cout << endl;
+				cout << appliedMove.captureX << endl;
+				cout << appliedMove.captureY << endl;
+				for (index = 0; index < board_state->size(); index++) {
+					if ((*board_state)[index].getX() == appliedMove.captureX && (*board_state)[index].getY() == appliedMove.captureY) {
+						board_state->erase(board_state->begin() + index);
+						break;
+					}
+				}
+			}
+
+			for (Piece& current : *board_state) {
+				if (current.getX() == appliedMove.sourceX && current.getY() == appliedMove.sourceY) {
+					current.setX(appliedMove.destinationX);
+					current.setY(appliedMove.destinationY);
+					break;
+				}
+			}
+
+			break;
+		}
+	}
+}
 // Reads the mouse inputs of the player to move the pieces
 void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, MovementState &mov) {
 	Vector2 mousePos = GetMousePosition();
@@ -135,8 +177,10 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 			}
 		}
 	}
-	// Selecting a piece to move
+	// Selecting a piece to move, try moving a selected piece if there is one
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+		if(mov.index >= 0) handleMovement(board_state, board_layout, mov, mousePos);
+
 		bool hadCollision = false;
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
@@ -155,10 +199,12 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 			mov.isSelected = false;
 		}
 	}
-	// Stops dragging the pieces
+	// Stops dragging the pieces, try moving the piece
 	if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
 		mov.isDragging = false;
 		mov.index = mov.isSelected ? mov.index : -1;
+
+		if (mov.index >= 0) handleMovement(board_state, board_layout, mov, mousePos);
 	}
 }
 

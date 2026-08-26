@@ -21,6 +21,7 @@
     <ClInclude Include="src\Piece.h" />
     <ClInclude Include="src\BoardLayout.h" />
     <ClInclude Include="src\ValidMove.h" />
+	<ClInclude Include="src\AppliedMove.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
@@ -41,5 +42,6 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Piece.cpp" />
     <ClCompile Include="src\ValidMove.cpp" />
+	<ClCompile Include="src\AppliedMove.cpp" />
   </ItemGroup>
 </Project>
