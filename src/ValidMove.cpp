@@ -1,7 +1,7 @@
 #include "ValidMove.h"
 
 Piece* getPieceAt(int x, int y, std::vector<Piece>& board_state) {
-    for (Piece piece : board_state) {
+    for (Piece& piece : board_state) {
         if (piece.getX() == x && piece.getY() == y) return &piece;
     }
     return nullptr;
@@ -24,7 +24,7 @@ std::vector<ValidMove> computeValidMoves(std::vector<Piece>& board_state, Piece&
 
             Piece* target = getPieceAt(targetX, targetY, board_state);
             if (target != nullptr) {
-                if (target->getIsWhite() != piece.getIsWhite()) continue;
+                if (target->getIsWhite() == piece.getIsWhite()) continue;
                 // Check if it's possible to take the piece (the space past this one is valid and free)
                 targetY += y;
                 targetX += x;
