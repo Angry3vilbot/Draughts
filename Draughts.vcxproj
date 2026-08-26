@@ -304,6 +304,7 @@
     <ClInclude Include="src\BoardLayout.h" />
     <ClInclude Include="src\Piece.h" />
     <ClInclude Include="src\resource_dir.h" />
+    <ClInclude Include="src\ValidMove.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico" />
@@ -322,6 +323,7 @@
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Piece.cpp" />
+    <ClCompile Include="src\ValidMove.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

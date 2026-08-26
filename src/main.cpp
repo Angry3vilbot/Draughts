@@ -4,6 +4,7 @@
 #include <vector>
 #include "Piece.h"
 #include "BoardLayout.h"
+#include "ValidMove.h"
 using namespace std;
 
 namespace Colours {
@@ -11,16 +12,20 @@ namespace Colours {
 		TILE_DARK = BROWN,
 		BOARD = DARKBROWN,
 		PIECE_WHITE = RAYWHITE,
-		PIECE_BLACK = BLACK;
+		PIECE_BLACK = BLACK,
+		PIECE_OUTLINE = ORANGE,
+		MOVE_INDICATOR = LIGHTGRAY,
+		TAKE_INDICATOR = RED;
 }
 
-struct DraggingState {
+struct MovementState {
 	bool isDragging = false;
+	bool isSelected = false;
 	int index = -1;
 };
 
 // Draws the game board, an 8x8 grid of alternating dark and light squares, surrounded by a darker border 
-void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, DraggingState drag) {
+void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementState mov) {
 	// Draw background to serve as a border
 	DrawRectangle(board_layout.boardX, board_layout.boardY, board_layout.boardSize, board_layout.boardSize, Colours::BOARD);
 	// Draw the grid of squares
@@ -32,52 +37,128 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, DraggingSt
 				(x + y) % 2 == 0 ? Colours::TILE_DARK : Colours::TILE_LIGHT);
 		}
 	}
-	// Draw the pieces, skips drawing the piece that is being dragged by the player
+	// Draw the pieces, skips drawing the piece that is being dragged/moved by the player
 	for (int i = 0; i < board_state->size(); i++) {
-		if (i == drag.index) continue;
+		if (i == mov.index) continue;
 		Piece piece = (*board_state)[i];
 
 		Vector2 center = board_layout.getSquareCenter(piece.getX(), piece.getY());
-		DrawCircle(
-			(int) center.x,
-			(int) center.y,
+		DrawCircleV(
+			center,
 			board_layout.pieceSize,
 			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+	}
+	// Draw possible moves
+	if (mov.isDragging || mov.isSelected) {
+		Piece piece = (*board_state)[mov.index];
+		vector<ValidMove> locations = computeValidMoves(*board_state, piece);
+		bool forcedCapture = false;
+		// Check if any move is a capture
+		for (ValidMove move : locations) {
+			if (move.isCapture) {
+				forcedCapture = true;
+				break;
+			}
+		}
+
+		for (ValidMove move : locations) {
+			Vector2 center = board_layout.getSquareCenter(move.x, move.y);
+			if (forcedCapture) {
+				if (move.isCapture) {
+					DrawCircleV(
+						center,
+						board_layout.pieceSize * 0.4,
+						Colours::TAKE_INDICATOR);
+				}
+			}
+			else {
+				DrawCircleV(
+					center,
+					board_layout.pieceSize * 0.4,
+					Colours::MOVE_INDICATOR);
+			}
+		}
 	}
 	// Draw the piece being dragged
-	if (drag.isDragging) {
-		Piece piece = (*board_state)[drag.index];
+	if (mov.isDragging) {
+		Piece piece = (*board_state)[mov.index];
 		Vector2 mousePos = GetMousePosition();
 
-		DrawCircle(
-			(int)mousePos.x,
-			(int)mousePos.y,
+		// Draw an outline
+		DrawRing(
+			mousePos,
+			board_layout.pieceSize,
+			board_layout.pieceSize * 1.1,
+			0,
+			360,
+			0,
+			Colours::PIECE_OUTLINE);
+		DrawCircleV(
+			mousePos,
 			board_layout.pieceSize,
 			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
 	}
-
+	// Draw the selected piece
+	else if (mov.isSelected) {
+		Piece piece = (*board_state)[mov.index];
+		Vector2 center = board_layout.getSquareCenter(piece.getX(), piece.getY());
+		
+		// Draw an outline
+		DrawRing(
+			center,
+			board_layout.pieceSize,
+			board_layout.pieceSize * 1.1,
+			0,
+			360,
+			0,
+			Colours::PIECE_OUTLINE);
+		DrawCircleV(
+			center,
+			board_layout.pieceSize,
+			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+	}
 }
 // Reads the mouse inputs of the player to move the pieces
-void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, DraggingState &drag) {
+void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, MovementState &mov) {
 	Vector2 mousePos = GetMousePosition();
 	// Dragging pieces around
 	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-		if (drag.isDragging) return;
+		if (mov.isDragging) return;
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
 			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
 
 			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour) {
-				drag.isDragging = true;
-				drag.index = i;
+				mov.isDragging = true;
+				mov.index = i;
 				break;
 			}
 		}
 	}
+	// Selecting a piece to move
+	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+		bool hadCollision = false;
+		for (int i = 0; i < board_state->size(); i++) {
+			Piece& piece = (*board_state)[i];
+			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
+
+			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour) {
+				mov.index = i;
+				mov.isSelected = true;
+				hadCollision = true;
+				break;
+			}
+		}
+		// If we had no collision, deselect the piece
+		if (!hadCollision) {
+			mov.index = -1;
+			mov.isSelected = false;
+		}
+	}
 	// Stops dragging the pieces
 	if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-		drag.isDragging = false;
-		drag.index = -1;
+		mov.isDragging = false;
+		mov.index = mov.isSelected ? mov.index : -1;
 	}
 }
 
@@ -108,7 +189,7 @@ int main() {
 	}
 
 	bool playerColour = true; // Temporary
-	DraggingState drag;
+	MovementState mov;
 
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window
@@ -119,8 +200,8 @@ int main() {
 		BeginDrawing();
 		// Setup the back buffer for drawing (clear color and depth buffers)
 		ClearBackground(RAYWHITE);
-		DrawBoard(&board_state, board_layout, drag);
-		ReadInput(&board_state, board_layout, playerColour, drag);
+		DrawBoard(&board_state, board_layout, mov);
+		ReadInput(&board_state, board_layout, playerColour, mov);
 
 		// end the frame and get ready for the next one  (display frame, poll input, etc...)
 		EndDrawing();
