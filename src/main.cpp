@@ -25,6 +25,22 @@ struct MovementState {
 	int index = -1;
 };
 
+// Draws the piece in the correct colour and crown status
+void DrawPiece(Vector2 center, float size, bool isWhite, bool isKing) {
+	// Draw the piece
+	DrawCircleV(
+		center,
+		size,
+		isWhite ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+	if (isKing) {
+		// Draw the king indicator
+		DrawCircleV(
+			center,
+			size * 0.4,
+			isWhite ? Colours::PIECE_BLACK : Colours::PIECE_WHITE);
+	}
+}
+
 // Draws the game board, an 8x8 grid of alternating dark and light squares, surrounded by a darker border 
 void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementState mov) {
 	// Draw background to serve as a border
@@ -42,12 +58,9 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementSt
 	for (int i = 0; i < board_state->size(); i++) {
 		if (i == mov.index) continue;
 		Piece piece = (*board_state)[i];
-
 		Vector2 center = board_layout.getSquareCenter(piece.getX(), piece.getY());
-		DrawCircleV(
-			center,
-			board_layout.pieceSize,
-			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+		
+		DrawPiece(center, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
 	}
 	// Draw possible moves
 	if (mov.isDragging || mov.isSelected) {
@@ -94,10 +107,7 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementSt
 			360,
 			0,
 			Colours::PIECE_OUTLINE);
-		DrawCircleV(
-			mousePos,
-			board_layout.pieceSize,
-			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+		DrawPiece(mousePos, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
 	}
 	// Draw the selected piece
 	else if (mov.isSelected) {
@@ -113,10 +123,7 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementSt
 			360,
 			0,
 			Colours::PIECE_OUTLINE);
-		DrawCircleV(
-			center,
-			board_layout.pieceSize,
-			piece.getIsWhite() ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
+		DrawPiece(center, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
 	}
 }
 // Handle moving the player's selected piece
@@ -137,9 +144,6 @@ void handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, Movem
 
 			if (appliedMove.isCapture) {
 				int index;
-				cout << endl;
-				cout << appliedMove.captureX << endl;
-				cout << appliedMove.captureY << endl;
 				for (index = 0; index < board_state->size(); index++) {
 					if ((*board_state)[index].getX() == appliedMove.captureX && (*board_state)[index].getY() == appliedMove.captureY) {
 						board_state->erase(board_state->begin() + index);
@@ -152,6 +156,7 @@ void handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, Movem
 				if (current.getX() == appliedMove.sourceX && current.getY() == appliedMove.sourceY) {
 					current.setX(appliedMove.destinationX);
 					current.setY(appliedMove.destinationY);
+					if (appliedMove.isCrown) current.setIsKing(true);
 					break;
 				}
 			}
