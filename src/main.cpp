@@ -6,6 +6,7 @@
 #include "BoardLayout.h"
 #include "ValidMove.h"
 #include "AppliedMove.h"
+#include "BitboardMasks.h"
 using namespace std;
 
 namespace Colours {
@@ -241,6 +242,7 @@ int main() {
 
 	bool playerColour = true; // Temporary
 	MovementState mov;
+	InitBitboardMasks();
 
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window
