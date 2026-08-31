@@ -228,29 +228,31 @@ int main() {
 	// Initialize the board state
 	vector<Piece> board_state;
 	board_state.reserve(24);
-	for (int y = 1; y <= 3; y++) {
-		for (int x = 1; x <= 8; x++) {
-			if ((x + y) % 2 == 0) {
-				// Place white piece
-				board_state.emplace_back(x, y, true);
-			}
-			if ((x + 9 - y) % 2 == 0) {
-				// Place black piece
-				board_state.emplace_back(x, 9 - y, false);
-			}
-		}
-	}
-	//Piece helper = Piece(1, 1, true);
-	//Piece helper2 = Piece(2, 2, false);
-	//helper.setIsKing(true);
-	//board_state.emplace_back(helper);
-	//board_state.emplace_back(helper2);
+	//for (int y = 1; y <= 3; y++) {
+	//	for (int x = 1; x <= 8; x++) {
+	//		if ((x + y) % 2 == 0) {
+	//			// Place white piece
+	//			board_state.emplace_back(x, y, true);
+	//		}
+	//		if ((x + 9 - y) % 2 == 0) {
+	//			// Place black piece
+	//			board_state.emplace_back(x, 9 - y, false);
+	//		}
+	//	}
+	//}
+	Piece helper = Piece(2, 2, true);
+	Piece helper2 = Piece(3, 3, false);
+	Piece helper3 = Piece(4, 4, false);
+	helper.setIsKing(true);
+	board_state.emplace_back(helper);
+	board_state.emplace_back(helper2);
+	board_state.emplace_back(helper3);
 
 	bool playerColour = true; // Temporary
 	MovementState mov;
 	InitBitboardMasks();
 	Bot bot = Bot(&board_state);
-	bot.GenerateMove(&board_state, 1, false);
+	bot.GenerateMove(&board_state, 1, true);
 
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window

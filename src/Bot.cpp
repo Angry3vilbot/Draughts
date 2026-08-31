@@ -61,7 +61,7 @@ std::vector<Move> Bot::GenerateMovesFromSource(int source, bool isWhite, bool is
 			destinationY = opponentY + deltaY;
 
 			int finalDestination = bitboards.CoordinatesToBitIndex(destinationX, destinationY);
-			if (finalDestination < 32 && finalDestination >= 0) {
+			if (finalDestination < 32 && finalDestination >= 0 && (notOccupied >> destination) & 1) {
 				bool isCrown = false;
 				if (!isKing) {
 					// If the piece is not a king and is on the opponent's back row, the move crowns the piece
