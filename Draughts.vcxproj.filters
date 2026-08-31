@@ -25,6 +25,7 @@
     <ClInclude Include="src\BitboardSet.h" />
     <ClInclude Include="src\BitboardMasks.h" />
     <ClInclude Include="src\Bot.h" />
+	<ClInclude Include="src\Move.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
@@ -42,6 +43,7 @@
     <ClCompile Include="src\ValidMove.cpp" />
     <ClCompile Include="src\AppliedMove.cpp" />
     <ClCompile Include="src\BitboardSet.cpp" />
+	<ClCompile Include="src\BitboardMasks.cpp" />
     <ClCompile Include="src\Bot.cpp" />
   </ItemGroup>
 </Project>

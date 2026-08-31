@@ -7,6 +7,7 @@
 #include "ValidMove.h"
 #include "AppliedMove.h"
 #include "BitboardMasks.h"
+#include "Bot.h"
 using namespace std;
 
 namespace Colours {
@@ -239,10 +240,17 @@ int main() {
 			}
 		}
 	}
+	//Piece helper = Piece(1, 1, true);
+	//Piece helper2 = Piece(2, 2, false);
+	//helper.setIsKing(true);
+	//board_state.emplace_back(helper);
+	//board_state.emplace_back(helper2);
 
 	bool playerColour = true; // Temporary
 	MovementState mov;
 	InitBitboardMasks();
+	Bot bot = Bot(&board_state);
+	bot.GenerateMove(&board_state, 1, false);
 
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window
