@@ -3,6 +3,7 @@
 unsigned int squares[32];
 // Left-Shift and Right-Shift masks
 unsigned int MASK_L5, MASK_L3, MASK_R5, MASK_R3;
+unsigned int MASK_ROW7, MASK_ROW3, MASK_ROW2, MASK_ROW6, MASK_DCORNER;
 
 void InitBitboardMasks() {
 	squares[0] = 1;
@@ -17,4 +18,10 @@ void InitBitboardMasks() {
 	MASK_L5 = squares[4] | squares[5] | squares[6] | squares[12] | squares[13] | squares[14] | squares[20] | squares[21] | squares[22];
 	MASK_R3 = squares[28] | squares[29] | squares[30] | squares[20] | squares[21] | squares[22] | squares[12] | squares[13] | squares[14] | squares[4] | squares[5] | squares[6];
 	MASK_R5 = squares[25] | squares[26] | squares[27] | squares[17] | squares[18] | squares[19] | squares[9] | squares[10] | squares[11];
+	// Initialize masks used for evaluation
+	MASK_ROW2 = squares[4] | squares[5] | squares[6] | squares[7];
+	MASK_ROW3 = squares[8] | squares[9] | squares[10] | squares[11];
+	MASK_ROW7 = squares[24] | squares[25] | squares[26] | squares[27];
+	MASK_ROW6 = squares[20] | squares[21] | squares[22] | squares[23];
+	MASK_DCORNER = squares[31] | squares[27] | squares[0] | squares[4];
 }

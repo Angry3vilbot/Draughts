@@ -59,9 +59,10 @@ std::vector<Move> Bot::GenerateMovesFromSource(int source, bool isWhite, bool is
 			int deltaY = opponentY - sourceY;
 			destinationX = opponentX + deltaX;
 			destinationY = opponentY + deltaY;
+			if (destinationX < 1 || destinationX > 8 || destinationY < 1 || destinationY > 8) return;
 
 			int finalDestination = bitboards.CoordinatesToBitIndex(destinationX, destinationY);
-			if (finalDestination < 32 && finalDestination >= 0 && (notOccupied >> destination) & 1) {
+			if (finalDestination < 32 && finalDestination >= 0 && (notOccupied >> finalDestination) & 1) {
 				bool isCrown = false;
 				if (!isKing) {
 					// If the piece is not a king and is on the opponent's back row, the move crowns the piece
@@ -108,25 +109,143 @@ std::vector<Move> Bot::GenerateLegalMoves(BitboardSet bitboards, bool colour) {
 	}
 	return result;
 }
+// Apply the move to a copy of the board for minimax
+void Bot::ApplyMoveOnBitboardSet(BitboardSet* board, Move* move) {
+	unsigned int removalMask = ~(1u << move->from);
+	unsigned int additionMask = 1u << move->to;
+	bool isWhite = (board->WhitePieces >> move->from) & 1;
+	bool isKing = (board->Kings >> move->from) & 1;
+	// Remove the piece from its original position on the colour bitboard
+	// and add it to the destination
+	if (isWhite) board->WhitePieces = (board->WhitePieces & removalMask) | additionMask;
+	else board->BlackPieces = (board->BlackPieces & removalMask) | additionMask;
+	// If the piece is a king, remove it from its original position on the kings bitboard
+	if (isKing) board->Kings = board->Kings & removalMask;
+	// If the piece is a king, or is crowned, add it to the destination
+	if (isKing || move->isCrown) board->Kings = board->Kings | additionMask;
+	// If the move is a capture, remove the taken piece from the opposite colour bitboard
+	if (move->isCapture) {
+		removalMask = ~(1u << move->capturedSquare);
+
+		if (isWhite) board->BlackPieces = board->BlackPieces & removalMask;
+		else board->WhitePieces = board->WhitePieces & removalMask;
+		board->Kings = board->Kings & removalMask;
+	}
+}
+// Evaluates the current position on the provided bitboards
+int Bot::EvaluatePosition(BitboardSet board, bool maximizingPlayer) {
+	int result = 0;
+	unsigned int whiteMovers = board.GetMoversWhite();
+	unsigned int blackMovers = board.GetMoversBlack();
+	unsigned int whiteJumpers = board.GetJumpersWhite();
+	unsigned int blackJumpers = board.GetJumpersBlack();
+	// Evaluation weights
+	const int PIECE_FACTOR = 1, KING_FACTOR = 3, MOVER_COUNT_FACTOR = 1, PROMOTION_CANDIDATES_FACTOR = 3, DOUBLE_CORNER_FACTOR = 5;
+	// Counters for all stats being evaluated
+	int white_pieces = std::popcount(board.WhitePieces);
+	int	black_pieces = std::popcount(board.BlackPieces);
+	int white_kings = std::popcount(board.WhitePieces & board.Kings);
+	int	black_kings = std::popcount(board.BlackPieces & board.Kings);
+	int white_movers = std::popcount(whiteMovers | whiteJumpers);
+	int black_movers = std::popcount(blackMovers | blackJumpers);
+	int white_promotion_candidates = std::popcount(
+		((board.WhitePieces & ~board.Kings) & MASK_ROW7 & whiteMovers)
+		| ((board.WhitePieces & ~board.Kings) & MASK_ROW6 & whiteJumpers));
+	int black_promotion_candidates = std::popcount(
+		((board.BlackPieces & ~board.Kings) & MASK_ROW2 & blackMovers)
+		| ((board.BlackPieces & ~board.Kings) & MASK_ROW3 & blackJumpers));
+	int white_double_corner_kings = std::popcount(board.WhitePieces & board.Kings & MASK_DCORNER);
+	int black_double_corner_kings = std::popcount(board.BlackPieces & board.Kings & MASK_DCORNER);
+
+	// Evaluate the position
+	result += maximizingPlayer ? (white_pieces - black_pieces) * PIECE_FACTOR : (black_pieces - white_pieces) * PIECE_FACTOR;
+	result += maximizingPlayer ? (white_kings - black_kings) * KING_FACTOR : (black_kings - white_kings) * KING_FACTOR;
+	result += maximizingPlayer ? (white_movers - black_movers) * MOVER_COUNT_FACTOR : (black_movers - white_movers) * MOVER_COUNT_FACTOR;
+	result += maximizingPlayer ? (white_promotion_candidates - black_promotion_candidates) * PROMOTION_CANDIDATES_FACTOR
+		: (black_promotion_candidates - white_promotion_candidates) * PROMOTION_CANDIDATES_FACTOR;
+	result += maximizingPlayer ? (white_double_corner_kings - black_double_corner_kings) * DOUBLE_CORNER_FACTOR
+		: (black_double_corner_kings - white_double_corner_kings) * DOUBLE_CORNER_FACTOR;
+	return result;
+}
+// Runs the minimax algorithm for the current depth and player/board state
+int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhite, int takeOriginIndex) {
+	// If the bot ran out of depth, finish the branch
+	if (depth == 0) return EvaluatePosition(board, maximizingIsWhite);
+
+	std::vector<Move> legalMoves = GenerateLegalMoves(board, colour);
+	bool isMaximizing = colour == maximizingIsWhite;
+	int score;
+	// If there are no legal moves, the maximizing player lost
+	if (legalMoves.empty()) return isMaximizing ? INT_MIN : INT_MAX;
+
+	score = isMaximizing ? INT_MIN : INT_MAX;
+	bool takesOnly = legalMoves[0].isCapture;
+	// If the move is not part of a take chain, perform standard minimax
+	// Otherwise, if takes are available, only consider moves made by the piece that started the chain
+	for (Move& move : legalMoves) {
+		if (takeOriginIndex != -1 && takesOnly && takeOriginIndex != move.from) continue;
+		// Make a copy of the current board and apply the move to it
+		BitboardSet nextBoard = board;
+		ApplyMoveOnBitboardSet(&nextBoard, &move);
+		// Run minimax for the next move with the new position
+		int eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1);
+		score = isMaximizing ? std::max(score, eval) : std::min(score, eval);
+	}
+
+	return score;
+}
 
 // Generate a move using the Minimax rule to find the best possible move for the bot with the given depth
-void Bot::GenerateMove(std::vector<Piece>* board_state, int depth, bool botColour) {
-	AppliedMove result;
+AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
+	bool botColour, bool isCaptureChain, int forcedOriginX, int forcedOriginY) {
+	AppliedMove result = { -1, -1, -1, -1, -1, -1, 0, 0 };
+	Move chosenMove{};
+	int highScore = INT_MIN;
 	// Update the bitboards with the current board state
 	bitboards.UpdateBitboards(board_state);
 	// Generate all of the possible legal moves for the current player (the bot)
 	std::vector<Move> legalMoves = GenerateLegalMoves(bitboards, botColour);
-	// If there are no legal moves, the game is over
-	for (const Move& move : legalMoves) {
-		std::cout << std::endl;
-		std::cout << "Move from : to: " << move.from << " : " << move.to << std::endl;
-		std::cout << "Move isCapture: " << move.isCapture << std::endl;
-		if(move.isCapture) std::cout << "Move capturedSquare: " << move.capturedSquare << std::endl;
-		std::cout << "Move isCrown: " << move.isCrown << std::endl;
+	// If it's a capture chain, filter the legal moves if the originator piece has moves available
+	if (isCaptureChain) {
+		int forcedOriginIndex = bitboards.CoordinatesToBitIndex(forcedOriginX, forcedOriginY);
+		bool originHasMove = false;
+		// Figure out if the chain originator has any moves (takes) available
+		for (const Move& move : legalMoves) {
+			if (move.from == forcedOriginIndex) originHasMove = true;
+		}
+		// If it does, then filter the moves
+		if (originHasMove) {
+			std::erase_if(legalMoves, [&](const Move& m) { return m.from != forcedOriginIndex; });
+		}
 	}
-	// NOTE: For minimaxing chains of takes, have minimax take two piece bit indexes as an argument.
-	// Inside minimax: if the origin bit index != 1 => only look at the move that takes the enemy piece at the second bit index
-	// Inside the caller: for every move, if the move was a take, generate legal moves.
-	// For every take run minimax with the same colour, first bit index set as the piece's location, second set as the enemy piece's location
-	// And then always run minimax with the different colour (normal route/not chaining [further])
+	// If there are no legal moves, the game is over
+	if (legalMoves.empty()) {
+		std::cout << std::endl;
+		std::cout << "The bot has lost. The game is over." << std::endl;
+		return result;
+	}
+	for (const Move& move : legalMoves) {
+		BitboardSet nextBoard = bitboards;
+		Move moveCopy = move;
+		ApplyMoveOnBitboardSet(&nextBoard, &moveCopy);
+
+		int score = Minimax(nextBoard, depth - 1, !botColour, botColour, moveCopy.isCapture ? moveCopy.to : -1);
+		chosenMove = score >= highScore ? move : chosenMove;
+		highScore = score >= highScore ? score : highScore;
+	}
+
+	int sourceX, sourceY, destinationX, destinationY, captureX, captureY;
+	BitIndexToCoordinates(chosenMove.from, &sourceX, &sourceY);
+	BitIndexToCoordinates(chosenMove.to, &destinationX, &destinationY);
+	if(chosenMove.isCapture) BitIndexToCoordinates(chosenMove.capturedSquare, &captureX, &captureY);
+
+	result = {
+		sourceX, sourceY,
+		destinationX, destinationY,
+		chosenMove.isCapture ? captureX : -1,
+		chosenMove.isCapture ? captureY : -1,
+		chosenMove.isCapture,
+		chosenMove.isCrown
+	};
+	return result;
 }

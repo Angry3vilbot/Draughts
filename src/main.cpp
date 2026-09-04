@@ -27,6 +27,18 @@ struct MovementState {
 	int index = -1;
 };
 
+struct MoveResult {
+	bool moved = false;
+	bool isCapture = false;
+	int destinationX = -1, destinationY = -1;
+};
+
+void ResetMovementState(MovementState* mov) {
+	mov->isDragging = false;
+	mov->isSelected = false;
+	mov->index = -1;
+}
+
 // Draws the piece in the correct colour and crown status
 void DrawPiece(Vector2 center, float size, bool isWhite, bool isKing) {
 	// Draw the piece
@@ -129,7 +141,8 @@ void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementSt
 	}
 }
 // Handle moving the player's selected piece
-void handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, MovementState& mov, Vector2 mousePos) {
+MoveResult handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, MovementState& mov, Vector2 mousePos) {
+	MoveResult result;
 	Piece piece = (*board_state)[mov.index];
 	vector<ValidMove> locations = computeValidMoves(*board_state, piece);
 
@@ -163,12 +176,50 @@ void handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, Movem
 				}
 			}
 
+			result.moved = true;
+			result.isCapture = appliedMove.isCapture;
+			result.destinationX = appliedMove.destinationX;
+			result.destinationY = appliedMove.destinationY;
 			break;
 		}
 	}
+	return result;
+}
+// Resolve the outcome of the move: if it's a capture chain, check if it can be continued, otherwise end the turn
+void ResolveMoveOutcome(const MoveResult& moveResult, vector<Piece>* board_state,
+	bool* playerTurn, bool* isCaptureChain, int* chainX, int* chainY) {
+	if (moveResult.isCapture) {
+		// Start/continue the capture chain
+		*isCaptureChain = true;
+		*chainX = moveResult.destinationX;
+		*chainY = moveResult.destinationY;
+		// If the piece has more captures, continue the chain
+		// Otherwise, end the player's turn
+		bool hasFurtherCapture = false;
+		for (Piece& piece : *board_state) {
+			if (piece.getX() == moveResult.destinationX && piece.getY() == moveResult.destinationY) {
+				for (ValidMove& move : computeValidMoves(*board_state, piece)) {
+					if (move.isCapture) {
+						hasFurtherCapture = true;
+						break;
+					}
+				}
+				break;
+			}
+		}
+
+		if (!hasFurtherCapture) {
+			*isCaptureChain = false;
+			*playerTurn = !*playerTurn;
+		}
+	}
+	else {
+		*playerTurn = !*playerTurn;
+	}
 }
 // Reads the mouse inputs of the player to move the pieces
-void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, MovementState &mov) {
+void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, MovementState &mov,
+	bool* playerTurn, bool* isCaptureChain, int* chainX, int* chainY) {
 	Vector2 mousePos = GetMousePosition();
 	// Dragging pieces around
 	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -176,8 +227,11 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
 			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
+			// If it's a capture chain, check if the piece is the one that initiated it
+			bool isMatch = !*isCaptureChain || (piece.getX() == *chainX && piece.getY() == *chainY);
 
-			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour) {
+			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour
+				&& isMatch) {
 				mov.isDragging = true;
 				mov.index = i;
 				break;
@@ -186,14 +240,22 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 	}
 	// Selecting a piece to move, try moving a selected piece if there is one
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-		if(mov.index >= 0) handleMovement(board_state, board_layout, mov, mousePos);
-
+		if (mov.index >= 0) {
+			MoveResult moveResult = handleMovement(board_state, board_layout, mov, mousePos);
+			if (moveResult.moved) {
+				ResetMovementState(&mov);
+				ResolveMoveOutcome(moveResult, board_state, playerTurn, isCaptureChain, chainX, chainY);
+				return;
+			}
+		}
+		// Select a piece
 		bool hadCollision = false;
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
 			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
 
-			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour) {
+			bool isMatch = !*isCaptureChain || (piece.getX() == *chainX && piece.getY() == *chainY);
+			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour && isMatch) {
 				mov.index = i;
 				mov.isSelected = true;
 				hadCollision = true;
@@ -211,7 +273,14 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 		mov.isDragging = false;
 		mov.index = mov.isSelected ? mov.index : -1;
 
-		if (mov.index >= 0) handleMovement(board_state, board_layout, mov, mousePos);
+		if (mov.index >= 0) {
+			MoveResult moveResult = handleMovement(board_state, board_layout, mov, mousePos);
+			if (moveResult.moved) {
+				ResetMovementState(&mov);
+				ResolveMoveOutcome(moveResult, board_state, playerTurn, isCaptureChain, chainX, chainY);
+				return;
+			}
+		}
 	}
 }
 
@@ -228,31 +297,26 @@ int main() {
 	// Initialize the board state
 	vector<Piece> board_state;
 	board_state.reserve(24);
-	//for (int y = 1; y <= 3; y++) {
-	//	for (int x = 1; x <= 8; x++) {
-	//		if ((x + y) % 2 == 0) {
-	//			// Place white piece
-	//			board_state.emplace_back(x, y, true);
-	//		}
-	//		if ((x + 9 - y) % 2 == 0) {
-	//			// Place black piece
-	//			board_state.emplace_back(x, 9 - y, false);
-	//		}
-	//	}
-	//}
-	Piece helper = Piece(2, 2, true);
-	Piece helper2 = Piece(3, 3, false);
-	Piece helper3 = Piece(4, 4, false);
-	helper.setIsKing(true);
-	board_state.emplace_back(helper);
-	board_state.emplace_back(helper2);
-	board_state.emplace_back(helper3);
+	for (int y = 1; y <= 3; y++) {
+		for (int x = 1; x <= 8; x++) {
+			if ((x + y) % 2 == 0) {
+				// Place white piece
+				board_state.emplace_back(x, y, true);
+			}
+			if ((x + 9 - y) % 2 == 0) {
+				// Place black piece
+				board_state.emplace_back(x, 9 - y, false);
+			}
+		}
+	}
 
-	bool playerColour = true; // Temporary
+	bool playerColour = false; // Temporary
+	bool playerTurn = playerColour;
+	bool isCaptureChain = false;
+	int chainOriginX = -1, chainOriginY = -1;
 	MovementState mov;
 	InitBitboardMasks();
 	Bot bot = Bot(&board_state);
-	bot.GenerateMove(&board_state, 1, true);
 
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window
@@ -264,9 +328,50 @@ int main() {
 		// Setup the back buffer for drawing (clear color and depth buffers)
 		ClearBackground(RAYWHITE);
 		DrawBoard(&board_state, board_layout, mov);
-		ReadInput(&board_state, board_layout, playerColour, mov);
+		if (playerTurn) {
+			ReadInput(&board_state, board_layout, playerColour, mov, &playerTurn, &isCaptureChain, &chainOriginX, &chainOriginY);
+		}
+		else {
+			AppliedMove botMove = bot.GenerateMove(&board_state, 5, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
+			if (botMove.sourceX == -1) break; // Game Over
+			for (Piece& current : board_state) {
+				if (current.getX() == botMove.sourceX && current.getY() == botMove.sourceY) {
+					current.setX(botMove.destinationX);
+					current.setY(botMove.destinationY);
+					if (botMove.isCrown) current.setIsKing(true);
+					break;
+				}
+			}
+			if (botMove.isCapture) {
+				erase_if(board_state,
+					[botMove](Piece piece) { return piece.getX() == botMove.captureX && piece.getY() == botMove.captureY; });
+				for (Piece& piece : board_state) {
+					if (piece.getX() == botMove.destinationX && piece.getY() == botMove.destinationY) {
+						// Check if there are captures available to continue the capture chain
+						// If there aren't switch the turn to the player
+						vector<ValidMove> nextMoves = computeValidMoves(board_state, piece);
+						isCaptureChain = false;
+						for (ValidMove vm : nextMoves) {
+							if (vm.isCapture) {
+								isCaptureChain = true;
+								break;
+							}
+						}
+						if (isCaptureChain) {
+							chainOriginX = botMove.destinationX;
+							chainOriginY = botMove.destinationY;
+						}
+						playerTurn = !isCaptureChain;
+						break;
+					}
+				}
+			}
+			else {
+				playerTurn = true;
+			}
+		}
 
-		// end the frame and get ready for the next one  (display frame, poll input, etc...)
+		// end the frame and get ready for the next one (display frame, poll input, etc...)
 		EndDrawing();
 	}
 

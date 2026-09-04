@@ -4,8 +4,8 @@
 AppliedMove tryApplyMove(Piece& piece, ValidMove& move) {
 	AppliedMove result = { piece.getX(), piece.getY(), move.x, move.y, -1, -1, move.isCapture, false };
 	if (move.isCapture) {
-		result.captureX = abs(result.sourceX + piece.getIsWhite());
-		result.captureY = abs(result.sourceY + piece.getIsWhite());
+		result.captureX = (result.sourceX + result.destinationX) / 2;
+		result.captureY = (result.sourceY + result.destinationY) / 2;
 	}
 
 	bool isWhiteAndCrowned = piece.getIsWhite() && result.destinationY == 8 && !piece.getIsKing();

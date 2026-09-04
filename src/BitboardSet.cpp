@@ -41,17 +41,17 @@ unsigned int BitboardSet::GetMoversWhite() {
 	// White pieces that can move. Right shifting an unoccupied space by 4 to find the piece that can go there, if there is one.
 	unsigned int movers = (notOccupied >> 4) & WhitePieces;
 	// Logical OR to include the L3 mask. Shifted RIGHT to find the starting square.
-	movers |= ((notOccupied & MASK_L3) >> 3) & WhitePieces;
+	movers |= ((notOccupied & MASK_R3) >> 3) & WhitePieces;
 	// Logical OR to include the L5 mask. Shifted RIGHT to find the starting square.
-	movers |= ((notOccupied & MASK_L5) >> 5) & WhitePieces;
+	movers |= ((notOccupied & MASK_R5) >> 5) & WhitePieces;
 	if (whiteKings) {
 		// Find backwards squares for moving kings
 		// Logical OR to include the guaranteed right shift by 4. Shifted LEFT to find the starting square.
 		movers |= (notOccupied << 4) & whiteKings;
 		// Logical OR to include the R3 mask. Shifted LEFT to find the starting square.
-		movers |= ((notOccupied & MASK_R3) << 3) & whiteKings;
+		movers |= ((notOccupied & MASK_L3) << 3) & whiteKings;
 		// Logical OR to include the R5 mask. Shifted LEFT to find the starting square.
-		movers |= ((notOccupied & MASK_R5) << 5) & whiteKings;
+		movers |= ((notOccupied & MASK_L5) << 5) & whiteKings;
 	}
 	return movers;
 }
@@ -64,17 +64,17 @@ unsigned int BitboardSet::GetMoversBlack() {
 	// Black pieces that can move. Left shifting an unoccupied space by 4 to find the piece that can go there, if there is one.
 	unsigned int movers = (notOccupied << 4) & BlackPieces;
 	// Logical OR to include the L3 mask. Shifted LEFT to find the starting square.
-	movers |= ((notOccupied & MASK_R3) << 3) & BlackPieces;
+	movers |= ((notOccupied & MASK_L3) << 3) & BlackPieces;
 	// Logical OR to include the L5 mask. Shifted LEFT to find the starting square.
-	movers |= ((notOccupied & MASK_R5) << 5) & BlackPieces;
+	movers |= ((notOccupied & MASK_L5) << 5) & BlackPieces;
 	if (blackKings) {
 		// Find backwards squares for moving kings
 		// Logical OR to include the guaranteed left shift by 4. Shifted RIGHT to find the starting square.
 		movers |= (notOccupied >> 4) & blackKings;
 		// Logical OR to include the R3 mask. Shifted RIGHT to find the starting square.
-		movers |= ((notOccupied & MASK_L3) >> 3) & blackKings;
+		movers |= ((notOccupied & MASK_R3) >> 3) & blackKings;
 		// Logical OR to include the R5 mask. Shifted RIGHT to find the starting square.
-		movers |= ((notOccupied & MASK_L5) >> 5) & blackKings;
+		movers |= ((notOccupied & MASK_R5) >> 5) & blackKings;
 	}
 	return movers;
 }
@@ -126,10 +126,10 @@ unsigned int BitboardSet::GetJumpersBlack() {
 	}
 	// Check the other unoccupied square direction
 	currentPossibleVictims = ( ((notOccupied & MASK_L3) << 3) | ((notOccupied & MASK_L5) << 5) ) & WhitePieces;
-	jumpers |= (currentPossibleVictims >> 4) & BlackPieces;
+	jumpers |= (currentPossibleVictims << 4) & BlackPieces;
 	if (blackKings) {
 		// Ditto, but backwards
-		currentPossibleVictims = (notOccupied >> 4) & BlackPieces;
+		currentPossibleVictims = (notOccupied >> 4) & WhitePieces;
 		if (currentPossibleVictims) {
 			jumpers |= (((currentPossibleVictims & MASK_R3) >> 3) | ((currentPossibleVictims & MASK_R5) >> 5)) & blackKings;
 		}

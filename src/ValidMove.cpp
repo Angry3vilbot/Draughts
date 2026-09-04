@@ -12,6 +12,7 @@ std::vector<ValidMove> computeValidMoves(std::vector<Piece>& board_state, Piece&
     std::vector<ValidMove> moves;
     int baseDirection = piece.getIsWhite() ? 1 : -1;
     std::vector<int> direction = piece.getIsKing() ? std::vector<int>{ 1, -1 } : std::vector<int>{ baseDirection };
+    bool hasCaptures = false;
     
     // Check one/both vertical directions
     for (int y : direction) {
@@ -33,6 +34,7 @@ std::vector<ValidMove> computeValidMoves(std::vector<Piece>& board_state, Piece&
                 if (getPieceAt(targetX, targetY, board_state) == nullptr) {
                     // Free space, is a valid capture
                     moves.push_back({ targetX, targetY, true });
+                    hasCaptures = true;
                 }
             }
             else {
@@ -40,6 +42,10 @@ std::vector<ValidMove> computeValidMoves(std::vector<Piece>& board_state, Piece&
                 moves.push_back({ targetX, targetY, false });
             }
         }
+    }
+    // If there are captures, filter the output to only captures
+    if (hasCaptures) {
+        std::erase_if(moves, [](ValidMove move) { return !move.isCapture; });
     }
 
     return moves;
