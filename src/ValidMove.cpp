@@ -7,6 +7,20 @@ Piece* getPieceAt(int x, int y, std::vector<Piece>& board_state) {
     return nullptr;
 }
 
+bool PieceHasCaptures(std::vector<Piece>& board_state, Piece& piece) {
+    for (ValidMove& move : computeValidMoves(board_state, piece)) {
+        if (move.isCapture) return true;
+    }
+    return false;
+}
+
+bool AnyPieceHasCaptures(std::vector<Piece>& board_state, bool colour) {
+    for (Piece& piece : board_state) {
+        if (piece.getIsWhite() == colour && PieceHasCaptures(board_state, piece)) return true;
+    }
+    return false;
+}
+
 std::vector<ValidMove> computeValidMoves(std::vector<Piece>& board_state, Piece& piece)
 {
     std::vector<ValidMove> moves;

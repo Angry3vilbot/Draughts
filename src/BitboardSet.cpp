@@ -33,30 +33,30 @@ void BitboardSet::UpdateBitboards(std::vector<Piece>* board_state) {
 	}
 }
 // Get all White pieces that can move (excluding jumping)
-unsigned int BitboardSet::GetMoversWhite() {
+unsigned int BitboardSet::GetMoversWhite() const {
 	// Unoccupied squares
 	unsigned int notOccupied = ~(WhitePieces | BlackPieces);
 	// White Kings
 	unsigned int whiteKings = WhitePieces & Kings;
 	// White pieces that can move. Right shifting an unoccupied space by 4 to find the piece that can go there, if there is one.
 	unsigned int movers = (notOccupied >> 4) & WhitePieces;
-	// Logical OR to include the L3 mask. Shifted RIGHT to find the starting square.
+	// Logical OR to include the R3 mask. Shifted RIGHT to find the starting square.
 	movers |= ((notOccupied & MASK_R3) >> 3) & WhitePieces;
-	// Logical OR to include the L5 mask. Shifted RIGHT to find the starting square.
+	// Logical OR to include the R5 mask. Shifted RIGHT to find the starting square.
 	movers |= ((notOccupied & MASK_R5) >> 5) & WhitePieces;
 	if (whiteKings) {
 		// Find backwards squares for moving kings
 		// Logical OR to include the guaranteed right shift by 4. Shifted LEFT to find the starting square.
 		movers |= (notOccupied << 4) & whiteKings;
-		// Logical OR to include the R3 mask. Shifted LEFT to find the starting square.
+		// Logical OR to include the L3 mask. Shifted LEFT to find the starting square.
 		movers |= ((notOccupied & MASK_L3) << 3) & whiteKings;
-		// Logical OR to include the R5 mask. Shifted LEFT to find the starting square.
+		// Logical OR to include the L5 mask. Shifted LEFT to find the starting square.
 		movers |= ((notOccupied & MASK_L5) << 5) & whiteKings;
 	}
 	return movers;
 }
 // Get all Black pieces that can move (excluding jumping)
-unsigned int BitboardSet::GetMoversBlack() {
+unsigned int BitboardSet::GetMoversBlack() const {
 	// Unoccupied squares
 	unsigned int notOccupied = ~(WhitePieces | BlackPieces);
 	// Black Kings
@@ -79,7 +79,7 @@ unsigned int BitboardSet::GetMoversBlack() {
 	return movers;
 }
 // Get all White pieces that can jump (i.e. take)
-unsigned int BitboardSet::GetJumpersWhite() {
+unsigned int BitboardSet::GetJumpersWhite() const {
 	// Unoccupied squares
 	unsigned int notOccupied = ~(WhitePieces | BlackPieces);
 	// White Kings
@@ -111,7 +111,7 @@ unsigned int BitboardSet::GetJumpersWhite() {
 	return jumpers;
 }
 // Get all Black pieces that can jump (i.e. take)
-unsigned int BitboardSet::GetJumpersBlack() {
+unsigned int BitboardSet::GetJumpersBlack() const {
 	// Unoccupied squares
 	unsigned int notOccupied = ~(WhitePieces | BlackPieces);
 	// Black Kings

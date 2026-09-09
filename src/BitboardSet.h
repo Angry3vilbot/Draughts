@@ -11,9 +11,9 @@ class BitboardSet {
 
 		BitboardSet(std::vector<Piece>* board_state);
 		void UpdateBitboards(std::vector<Piece>* board_state);
-		unsigned int GetMoversWhite();
-		unsigned int GetMoversBlack();
-		unsigned int GetJumpersWhite();
-		unsigned int GetJumpersBlack();
+		unsigned int GetMoversWhite() const;
+		unsigned int GetMoversBlack() const;
+		unsigned int GetJumpersWhite() const;
+		unsigned int GetJumpersBlack() const;
 		int CoordinatesToBitIndex(int x, int y);
 };

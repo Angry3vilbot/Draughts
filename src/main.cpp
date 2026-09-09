@@ -8,6 +8,7 @@
 #include "AppliedMove.h"
 #include "BitboardMasks.h"
 #include "Bot.h"
+#include "Zobrist.h"
 using namespace std;
 
 namespace Colours {
@@ -30,6 +31,7 @@ struct MovementState {
 struct MoveResult {
 	bool moved = false;
 	bool isCapture = false;
+	bool isCrown = false;
 	int destinationX = -1, destinationY = -1;
 };
 
@@ -178,6 +180,7 @@ MoveResult handleMovement(vector<Piece>* board_state, BoardLayout& board_layout,
 
 			result.moved = true;
 			result.isCapture = appliedMove.isCapture;
+			result.isCrown = appliedMove.isCrown;
 			result.destinationX = appliedMove.destinationX;
 			result.destinationY = appliedMove.destinationY;
 			break;
@@ -188,7 +191,7 @@ MoveResult handleMovement(vector<Piece>* board_state, BoardLayout& board_layout,
 // Resolve the outcome of the move: if it's a capture chain, check if it can be continued, otherwise end the turn
 void ResolveMoveOutcome(const MoveResult& moveResult, vector<Piece>* board_state,
 	bool* playerTurn, bool* isCaptureChain, int* chainX, int* chainY) {
-	if (moveResult.isCapture) {
+	if (moveResult.isCapture && !moveResult.isCrown) {
 		// Start/continue the capture chain
 		*isCaptureChain = true;
 		*chainX = moveResult.destinationX;
@@ -224,11 +227,20 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 	// Dragging pieces around
 	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
 		if (mov.isDragging) return;
+
+		bool areCapturesAvailable = AnyPieceHasCaptures(*board_state, playerColour);
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
 			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
 			// If it's a capture chain, check if the piece is the one that initiated it
-			bool isMatch = !*isCaptureChain || (piece.getX() == *chainX && piece.getY() == *chainY);
+			// Otherwise, if there are any captures available, only match pieces with captures
+			bool isMatch;
+			if (*isCaptureChain) {
+				isMatch = piece.getX() == *chainX && piece.getY() == *chainY;
+			}
+			else {
+				isMatch = !areCapturesAvailable || PieceHasCaptures(*board_state, piece);
+			}
 
 			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour
 				&& isMatch) {
@@ -250,11 +262,16 @@ void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playe
 		}
 		// Select a piece
 		bool hadCollision = false;
+		bool areCapturesAvailable = AnyPieceHasCaptures(*board_state, playerColour);
 		for (int i = 0; i < board_state->size(); i++) {
 			Piece& piece = (*board_state)[i];
 			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
+			// If it's a capture chain, check if the piece is the one that initiated it
+			// Otherwise, if there are any captures available, only match pieces with captures
+			bool isMatch;
+			if (*isCaptureChain) isMatch = piece.getX() == *chainX && piece.getY() == *chainY;
+			else isMatch = !areCapturesAvailable || PieceHasCaptures(*board_state, piece);
 
-			bool isMatch = !*isCaptureChain || (piece.getX() == *chainX && piece.getY() == *chainY);
 			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour && isMatch) {
 				mov.index = i;
 				mov.isSelected = true;
@@ -316,6 +333,7 @@ int main() {
 	int chainOriginX = -1, chainOriginY = -1;
 	MovementState mov;
 	InitBitboardMasks();
+	InitZobristHash();
 	Bot bot = Bot(&board_state);
 
 	// game loop
@@ -332,7 +350,7 @@ int main() {
 			ReadInput(&board_state, board_layout, playerColour, mov, &playerTurn, &isCaptureChain, &chainOriginX, &chainOriginY);
 		}
 		else {
-			AppliedMove botMove = bot.GenerateMove(&board_state, 5, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
+			AppliedMove botMove = bot.GenerateMove(&board_state, 10, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
 			if (botMove.sourceX == -1) break; // Game Over
 			for (Piece& current : board_state) {
 				if (current.getX() == botMove.sourceX && current.getY() == botMove.sourceY) {
@@ -345,24 +363,32 @@ int main() {
 			if (botMove.isCapture) {
 				erase_if(board_state,
 					[botMove](Piece piece) { return piece.getX() == botMove.captureX && piece.getY() == botMove.captureY; });
-				for (Piece& piece : board_state) {
-					if (piece.getX() == botMove.destinationX && piece.getY() == botMove.destinationY) {
-						// Check if there are captures available to continue the capture chain
-						// If there aren't switch the turn to the player
-						vector<ValidMove> nextMoves = computeValidMoves(board_state, piece);
-						isCaptureChain = false;
-						for (ValidMove vm : nextMoves) {
-							if (vm.isCapture) {
-								isCaptureChain = true;
-								break;
+				// If the piece is crowned, the chain ends
+				if (botMove.isCrown) {
+					isCaptureChain = false;
+					playerTurn = true;
+				}
+				else
+				{
+					for (Piece& piece : board_state) {
+						if (piece.getX() == botMove.destinationX && piece.getY() == botMove.destinationY) {
+							// Check if there are captures available to continue the capture chain
+							// If there aren't switch the turn to the player
+							vector<ValidMove> nextMoves = computeValidMoves(board_state, piece);
+							isCaptureChain = false;
+							for (ValidMove vm : nextMoves) {
+								if (vm.isCapture) {
+									isCaptureChain = true;
+									break;
+								}
 							}
+							if (isCaptureChain) {
+								chainOriginX = botMove.destinationX;
+								chainOriginY = botMove.destinationY;
+							}
+							playerTurn = !isCaptureChain;
+							break;
 						}
-						if (isCaptureChain) {
-							chainOriginX = botMove.destinationX;
-							chainOriginY = botMove.destinationY;
-						}
-						playerTurn = !isCaptureChain;
-						break;
 					}
 				}
 			}

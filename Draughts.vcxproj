@@ -304,12 +304,14 @@
     <ClInclude Include="src\BoardLayout.h" />
     <ClInclude Include="src\Piece.h" />
     <ClInclude Include="src\resource_dir.h" />
+    <ClInclude Include="src\TTEntry.h" />
     <ClInclude Include="src\ValidMove.h" />
     <ClInclude Include="src\AppliedMove.h" />
     <ClInclude Include="src\BitboardSet.h" />
     <ClInclude Include="src\BitboardMasks.h" />
     <ClInclude Include="src\Bot.h" />
     <ClInclude Include="src\Move.h" />
+    <ClInclude Include="src\Zobrist.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico" />
@@ -331,6 +333,7 @@
     <ClCompile Include="src\BitboardSet.cpp" />
     <ClCompile Include="src\BitboardMasks.cpp" />
     <ClCompile Include="src\Bot.cpp" />
+    <ClCompile Include="src\Zobrist.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

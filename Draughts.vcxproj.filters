@@ -26,6 +26,12 @@
     <ClInclude Include="src\BitboardMasks.h" />
     <ClInclude Include="src\Bot.h" />
     <ClInclude Include="src\Move.h" />
+    <ClInclude Include="src\TTEntry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Zobrist.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\icon.ico">
@@ -46,6 +52,9 @@
     <ClCompile Include="src\BitboardMasks.cpp" />
     <ClCompile Include="src\Bot.cpp" />
     <ClCompile Include="src\TestMasks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Zobrist.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
