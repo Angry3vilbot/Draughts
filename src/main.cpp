@@ -217,6 +217,7 @@ void ResolveMoveOutcome(const MoveResult& moveResult, vector<Piece>* board_state
 		}
 	}
 	else {
+		*isCaptureChain = false;
 		*playerTurn = !*playerTurn;
 	}
 }
@@ -350,7 +351,7 @@ int main() {
 			ReadInput(&board_state, board_layout, playerColour, mov, &playerTurn, &isCaptureChain, &chainOriginX, &chainOriginY);
 		}
 		else {
-			AppliedMove botMove = bot.GenerateMove(&board_state, 10, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
+			AppliedMove botMove = bot.GenerateMove(&board_state, 20, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
 			if (botMove.sourceX == -1) break; // Game Over
 			for (Piece& current : board_state) {
 				if (current.getX() == botMove.sourceX && current.getY() == botMove.sourceY) {
