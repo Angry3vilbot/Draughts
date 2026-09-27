@@ -302,8 +302,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\BoardLayout.h" />
+    <ClInclude Include="src\BoardState.h" />
+    <ClInclude Include="src\Game.h" />
+    <ClInclude Include="src\GameRenderer.h" />
+    <ClInclude Include="src\GameSettings.h" />
+    <ClInclude Include="src\GameState.h" />
+    <ClInclude Include="src\Menu.h" />
+    <ClInclude Include="src\MoveResult.h" />
     <ClInclude Include="src\Piece.h" />
     <ClInclude Include="src\resource_dir.h" />
+    <ClInclude Include="src\Result.h" />
     <ClInclude Include="src\TTEntry.h" />
     <ClInclude Include="src\ValidMove.h" />
     <ClInclude Include="src\AppliedMove.h" />
@@ -325,8 +333,13 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\BoardState.cpp" />
+    <ClCompile Include="src\Game.cpp" />
+    <ClCompile Include="src\GameRenderer.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\Menu.cpp" />
     <ClCompile Include="src\Piece.cpp" />
+    <ClCompile Include="src\Result.cpp" />
     <ClCompile Include="src\TestMasks.cpp" />
     <ClCompile Include="src\ValidMove.cpp" />
     <ClCompile Include="src\AppliedMove.cpp" />

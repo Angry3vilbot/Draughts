@@ -1,306 +1,13 @@
 #include "raylib.h"
-#include "resource_dir.h"	// utility header for SearchAndSetResourceDir
-#include <iostream>
 #include <vector>
-#include "Piece.h"
-#include "BoardLayout.h"
-#include "ValidMove.h"
-#include "AppliedMove.h"
 #include "BitboardMasks.h"
 #include "Bot.h"
-#include "Zobrist.h"
+#include "Menu.h"
+#include "Result.h"
+#include "Game.h"
+#include "GameRenderer.h"
+#include "BoardState.h"
 using namespace std;
-
-namespace Colours {
-	constexpr Color TILE_LIGHT = BEIGE,
-		TILE_DARK = BROWN,
-		BOARD = DARKBROWN,
-		PIECE_WHITE = RAYWHITE,
-		PIECE_BLACK = BLACK,
-		PIECE_OUTLINE = ORANGE,
-		MOVE_INDICATOR = LIGHTGRAY,
-		TAKE_INDICATOR = RED;
-}
-
-struct MovementState {
-	bool isDragging = false;
-	bool isSelected = false;
-	int index = -1;
-};
-
-struct MoveResult {
-	bool moved = false;
-	bool isCapture = false;
-	bool isCrown = false;
-	int destinationX = -1, destinationY = -1;
-};
-
-void ResetMovementState(MovementState* mov) {
-	mov->isDragging = false;
-	mov->isSelected = false;
-	mov->index = -1;
-}
-
-// Draws the piece in the correct colour and crown status
-void DrawPiece(Vector2 center, float size, bool isWhite, bool isKing) {
-	// Draw the piece
-	DrawCircleV(
-		center,
-		size,
-		isWhite ? Colours::PIECE_WHITE : Colours::PIECE_BLACK);
-	if (isKing) {
-		// Draw the king indicator
-		DrawCircleV(
-			center,
-			size * 0.4,
-			isWhite ? Colours::PIECE_BLACK : Colours::PIECE_WHITE);
-	}
-}
-
-// Draws the game board, an 8x8 grid of alternating dark and light squares, surrounded by a darker border 
-void DrawBoard(vector<Piece> *board_state, BoardLayout &board_layout, MovementState mov) {
-	// Draw background to serve as a border
-	DrawRectangle(board_layout.boardX, board_layout.boardY, board_layout.boardSize, board_layout.boardSize, Colours::BOARD);
-	// Draw the grid of squares
-	for (int x = 1; x <= 8; x++) {
-		for (int y = 1; y <= 8; y++) {
-			Vector2 topLeft = board_layout.getSquareTopLeft(x, y);
-			
-			DrawRectangle(topLeft.x, topLeft.y, board_layout.tileSize, board_layout.tileSize,
-				(x + y) % 2 == 0 ? Colours::TILE_DARK : Colours::TILE_LIGHT);
-		}
-	}
-	// Draw the pieces, skips drawing the piece that is being dragged/moved by the player
-	for (int i = 0; i < board_state->size(); i++) {
-		if (i == mov.index) continue;
-		Piece piece = (*board_state)[i];
-		Vector2 center = board_layout.getSquareCenter(piece.getX(), piece.getY());
-		
-		DrawPiece(center, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
-	}
-	// Draw possible moves
-	if (mov.isDragging || mov.isSelected) {
-		Piece piece = (*board_state)[mov.index];
-		vector<ValidMove> locations = computeValidMoves(*board_state, piece);
-		bool forcedCapture = false;
-		// Check if any move is a capture
-		for (ValidMove move : locations) {
-			if (move.isCapture) {
-				forcedCapture = true;
-				break;
-			}
-		}
-
-		for (ValidMove move : locations) {
-			Vector2 center = board_layout.getSquareCenter(move.x, move.y);
-			if (forcedCapture) {
-				if (move.isCapture) {
-					DrawCircleV(
-						center,
-						board_layout.pieceSize * 0.4,
-						Colours::TAKE_INDICATOR);
-				}
-			}
-			else {
-				DrawCircleV(
-					center,
-					board_layout.pieceSize * 0.4,
-					Colours::MOVE_INDICATOR);
-			}
-		}
-	}
-	// Draw the piece being dragged
-	if (mov.isDragging) {
-		Piece piece = (*board_state)[mov.index];
-		Vector2 mousePos = GetMousePosition();
-
-		// Draw an outline
-		DrawRing(
-			mousePos,
-			board_layout.pieceSize,
-			board_layout.pieceSize * 1.1,
-			0,
-			360,
-			0,
-			Colours::PIECE_OUTLINE);
-		DrawPiece(mousePos, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
-	}
-	// Draw the selected piece
-	else if (mov.isSelected) {
-		Piece piece = (*board_state)[mov.index];
-		Vector2 center = board_layout.getSquareCenter(piece.getX(), piece.getY());
-		
-		// Draw an outline
-		DrawRing(
-			center,
-			board_layout.pieceSize,
-			board_layout.pieceSize * 1.1,
-			0,
-			360,
-			0,
-			Colours::PIECE_OUTLINE);
-		DrawPiece(center, board_layout.pieceSize, piece.getIsWhite(), piece.getIsKing());
-	}
-}
-// Handle moving the player's selected piece
-MoveResult handleMovement(vector<Piece>* board_state, BoardLayout& board_layout, MovementState& mov, Vector2 mousePos) {
-	MoveResult result;
-	Piece piece = (*board_state)[mov.index];
-	vector<ValidMove> locations = computeValidMoves(*board_state, piece);
-
-	for (ValidMove location : locations) {
-		Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
-		Vector2 squareCorner = board_layout.getSquareTopLeft(location.x, location.y);
-		Rectangle square = { squareCorner.x, squareCorner.y, board_layout.tileSize, board_layout.tileSize };
-
-		bool collisionMouseSquare = CheckCollisionPointRec(mousePos, square);
-		bool collisionPieceSquare = CheckCollisionCircleRec(pieceCenter, board_layout.pieceSize, square);
-
-		if (collisionMouseSquare || collisionPieceSquare) {
-			AppliedMove appliedMove = tryApplyMove(piece, location);
-
-			if (appliedMove.isCapture) {
-				int index;
-				for (index = 0; index < board_state->size(); index++) {
-					if ((*board_state)[index].getX() == appliedMove.captureX && (*board_state)[index].getY() == appliedMove.captureY) {
-						board_state->erase(board_state->begin() + index);
-						break;
-					}
-				}
-			}
-
-			for (Piece& current : *board_state) {
-				if (current.getX() == appliedMove.sourceX && current.getY() == appliedMove.sourceY) {
-					current.setX(appliedMove.destinationX);
-					current.setY(appliedMove.destinationY);
-					if (appliedMove.isCrown) current.setIsKing(true);
-					break;
-				}
-			}
-
-			result.moved = true;
-			result.isCapture = appliedMove.isCapture;
-			result.isCrown = appliedMove.isCrown;
-			result.destinationX = appliedMove.destinationX;
-			result.destinationY = appliedMove.destinationY;
-			break;
-		}
-	}
-	return result;
-}
-// Resolve the outcome of the move: if it's a capture chain, check if it can be continued, otherwise end the turn
-void ResolveMoveOutcome(const MoveResult& moveResult, vector<Piece>* board_state,
-	bool* playerTurn, bool* isCaptureChain, int* chainX, int* chainY) {
-	if (moveResult.isCapture && !moveResult.isCrown) {
-		// Start/continue the capture chain
-		*isCaptureChain = true;
-		*chainX = moveResult.destinationX;
-		*chainY = moveResult.destinationY;
-		// If the piece has more captures, continue the chain
-		// Otherwise, end the player's turn
-		bool hasFurtherCapture = false;
-		for (Piece& piece : *board_state) {
-			if (piece.getX() == moveResult.destinationX && piece.getY() == moveResult.destinationY) {
-				for (ValidMove& move : computeValidMoves(*board_state, piece)) {
-					if (move.isCapture) {
-						hasFurtherCapture = true;
-						break;
-					}
-				}
-				break;
-			}
-		}
-
-		if (!hasFurtherCapture) {
-			*isCaptureChain = false;
-			*playerTurn = !*playerTurn;
-		}
-	}
-	else {
-		*isCaptureChain = false;
-		*playerTurn = !*playerTurn;
-	}
-}
-// Reads the mouse inputs of the player to move the pieces
-void ReadInput(vector<Piece>* board_state, BoardLayout &board_layout, bool playerColour, MovementState &mov,
-	bool* playerTurn, bool* isCaptureChain, int* chainX, int* chainY) {
-	Vector2 mousePos = GetMousePosition();
-	// Dragging pieces around
-	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-		if (mov.isDragging) return;
-
-		bool areCapturesAvailable = AnyPieceHasCaptures(*board_state, playerColour);
-		for (int i = 0; i < board_state->size(); i++) {
-			Piece& piece = (*board_state)[i];
-			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
-			// If it's a capture chain, check if the piece is the one that initiated it
-			// Otherwise, if there are any captures available, only match pieces with captures
-			bool isMatch;
-			if (*isCaptureChain) {
-				isMatch = piece.getX() == *chainX && piece.getY() == *chainY;
-			}
-			else {
-				isMatch = !areCapturesAvailable || PieceHasCaptures(*board_state, piece);
-			}
-
-			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour
-				&& isMatch) {
-				mov.isDragging = true;
-				mov.index = i;
-				break;
-			}
-		}
-	}
-	// Selecting a piece to move, try moving a selected piece if there is one
-	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-		if (mov.index >= 0) {
-			MoveResult moveResult = handleMovement(board_state, board_layout, mov, mousePos);
-			if (moveResult.moved) {
-				ResetMovementState(&mov);
-				ResolveMoveOutcome(moveResult, board_state, playerTurn, isCaptureChain, chainX, chainY);
-				return;
-			}
-		}
-		// Select a piece
-		bool hadCollision = false;
-		bool areCapturesAvailable = AnyPieceHasCaptures(*board_state, playerColour);
-		for (int i = 0; i < board_state->size(); i++) {
-			Piece& piece = (*board_state)[i];
-			Vector2 pieceCenter = board_layout.getSquareCenter(piece.getX(), piece.getY());
-			// If it's a capture chain, check if the piece is the one that initiated it
-			// Otherwise, if there are any captures available, only match pieces with captures
-			bool isMatch;
-			if (*isCaptureChain) isMatch = piece.getX() == *chainX && piece.getY() == *chainY;
-			else isMatch = !areCapturesAvailable || PieceHasCaptures(*board_state, piece);
-
-			if (CheckCollisionPointCircle(mousePos, pieceCenter, board_layout.pieceSize) && piece.getIsWhite() == playerColour && isMatch) {
-				mov.index = i;
-				mov.isSelected = true;
-				hadCollision = true;
-				break;
-			}
-		}
-		// If we had no collision, deselect the piece
-		if (!hadCollision) {
-			mov.index = -1;
-			mov.isSelected = false;
-		}
-	}
-	// Stops dragging the pieces, try moving the piece
-	if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-		mov.isDragging = false;
-		mov.index = mov.isSelected ? mov.index : -1;
-
-		if (mov.index >= 0) {
-			MoveResult moveResult = handleMovement(board_state, board_layout, mov, mousePos);
-			if (moveResult.moved) {
-				ResetMovementState(&mov);
-				ResolveMoveOutcome(moveResult, board_state, playerTurn, isCaptureChain, chainX, chainY);
-				return;
-			}
-		}
-	}
-}
 
 int main() {
 	// Tell the resizable window to use vsync and work on high DPI displays, MSAA to remove aliasing from pieces
@@ -309,97 +16,63 @@ int main() {
 	// Create the window and OpenGL context
 	InitWindow(1280, 720, "Draughts (Checkers)");
 
-	// Utility function from resource_dir.h to find the resources folder and set it as the current working directory so we can load from it
-	SearchAndSetResourceDir("resources");
-
 	// Initialize the board state
-	vector<Piece> board_state;
-	board_state.reserve(24);
-	for (int y = 1; y <= 3; y++) {
-		for (int x = 1; x <= 8; x++) {
-			if ((x + y) % 2 == 0) {
-				// Place white piece
-				board_state.emplace_back(x, y, true);
-			}
-			if ((x + 9 - y) % 2 == 0) {
-				// Place black piece
-				board_state.emplace_back(x, 9 - y, false);
-			}
-		}
-	}
+	InitBoardState();
 
-	bool playerColour = false; // Temporary
-	bool playerTurn = playerColour;
-	bool isCaptureChain = false;
-	int chainOriginX = -1, chainOriginY = -1;
-	MovementState mov;
 	InitBitboardMasks();
 	InitZobristHash();
+	history.reserve(256);
 	Bot bot = Bot(&board_state);
 
+	bool started = false;
+	bool appliedConfig = false;
 	// game loop
 	while (!WindowShouldClose())		// run the loop until the user presses ESCAPE or presses the Close button on the window
 	{
+		// Display the main menu until the user starts the game
+		if (!started) {
+			BeginDrawing();
+			ClearBackground(RAYWHITE);
+			DrawMenu(started, settings);
+			EndDrawing();
+			continue;
+		}
+		else if (!appliedConfig) {
+			game.playerColour = settings.choseWhite;
+			game.playerTurn = game.playerColour;
+			game.depth = settings.depth;
+			game.gameMode = settings.gameMode;
+
+			appliedConfig = true;
+		}
 		// Compute the board layout
 		BoardLayout board_layout = computeLayout();
 		// drawing
 		BeginDrawing();
 		// Setup the back buffer for drawing (clear color and depth buffers)
 		ClearBackground(RAYWHITE);
-		DrawBoard(&board_state, board_layout, mov);
-		if (playerTurn) {
-			ReadInput(&board_state, board_layout, playerColour, mov, &playerTurn, &isCaptureChain, &chainOriginX, &chainOriginY);
-		}
-		else {
-			AppliedMove botMove = bot.GenerateMove(&board_state, 20, !playerColour, isCaptureChain, chainOriginX, chainOriginY);
-			if (botMove.sourceX == -1) break; // Game Over
-			for (Piece& current : board_state) {
-				if (current.getX() == botMove.sourceX && current.getY() == botMove.sourceY) {
-					current.setX(botMove.destinationX);
-					current.setY(botMove.destinationY);
-					if (botMove.isCrown) current.setIsKing(true);
-					break;
-				}
-			}
-			if (botMove.isCapture) {
-				erase_if(board_state,
-					[botMove](Piece piece) { return piece.getX() == botMove.captureX && piece.getY() == botMove.captureY; });
-				// If the piece is crowned, the chain ends
-				if (botMove.isCrown) {
-					isCaptureChain = false;
-					playerTurn = true;
-				}
-				else
-				{
-					for (Piece& piece : board_state) {
-						if (piece.getX() == botMove.destinationX && piece.getY() == botMove.destinationY) {
-							// Check if there are captures available to continue the capture chain
-							// If there aren't switch the turn to the player
-							vector<ValidMove> nextMoves = computeValidMoves(board_state, piece);
-							isCaptureChain = false;
-							for (ValidMove vm : nextMoves) {
-								if (vm.isCapture) {
-									isCaptureChain = true;
-									break;
-								}
-							}
-							if (isCaptureChain) {
-								chainOriginX = botMove.destinationX;
-								chainOriginY = botMove.destinationY;
-							}
-							playerTurn = !isCaptureChain;
-							break;
-						}
-					}
-				}
-			}
-			else {
-				playerTurn = true;
-			}
-		}
-
+		DrawBoard(&board_state, board_layout, game);
+		if(game.status != 0) DrawResultScreen(game.status == 1, bot, started);
 		// end the frame and get ready for the next one (display frame, poll input, etc...)
 		EndDrawing();
+		if (game.status == 0)
+		{
+			if (game.playerTurn) {
+				MoveResult moveResult = ReadInput(&board_state, board_layout, game, history);
+				if (moveResult.moved) ResolveMoveOutcome(moveResult, &board_state);
+			}
+			else {
+				// Playing against the bot
+				if (settings.gameMode == 1) {
+					DoBotMove(&board_state, bot);
+				}
+				// Two Player Mode
+				else {
+					MoveResult moveResult = ReadInput(&board_state, board_layout, game, history);
+					if (moveResult.moved) ResolveMoveOutcome(moveResult, &board_state);
+				}
+			}
+		}
 	}
 
 	return 0;

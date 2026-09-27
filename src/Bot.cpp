@@ -1,9 +1,15 @@
 #include "Bot.h"
 #include <bit>
-#include <iostream>
 #include <algorithm>
 
-Bot::Bot(std::vector<Piece>* board_state) : bitboards(board_state), transpositionTable(TT_SIZE), NodeCounter(0) {}
+Bot::Bot(std::vector<Piece>* board_state): bitboards(board_state), transpositionTable(TT_SIZE), weights() {}
+// Reset the bot, done before a new game
+void Bot::ResetBot(std::vector<Piece>* board_state) {
+	ResetKillerMoves();
+	ResetTranspositionTable();
+	bitboards = BitboardSet(board_state);
+	searchPathHistory.clear();
+}
 // Clear the transposition table, done before a new game
 void Bot::ResetTranspositionTable() {
 	std::fill(transpositionTable.begin(), transpositionTable.end(), TTEntry{});
@@ -156,11 +162,9 @@ void Bot::ApplyMoveOnBitboardSet(BitboardSet* board, Move* move) {
 int Bot::EvaluatePosition(BitboardSet board, bool maximizingPlayer,
 	unsigned int whiteMovers, unsigned int blackMovers, unsigned int whiteJumpers, unsigned int blackJumpers) {
 	int result = 0;
-	// Evaluation weights
-	const int PIECE_FACTOR = 1, KING_FACTOR = 3, MOVER_COUNT_FACTOR = 1, PROMOTION_CANDIDATES_FACTOR = 2, DOUBLE_CORNER_FACTOR = 5;
 	// Counters for all stats being evaluated
-	int white_pieces = std::popcount(board.WhitePieces);
-	int	black_pieces = std::popcount(board.BlackPieces);
+	int white_pieces = std::popcount(board.WhitePieces & ~board.Kings);
+	int	black_pieces = std::popcount(board.BlackPieces & ~board.Kings);
 	int white_kings = std::popcount(board.WhitePieces & board.Kings);
 	int	black_kings = std::popcount(board.BlackPieces & board.Kings);
 	int white_movers = std::popcount(whiteMovers | whiteJumpers);
@@ -174,20 +178,33 @@ int Bot::EvaluatePosition(BitboardSet board, bool maximizingPlayer,
 	int white_double_corner_kings = std::popcount(board.WhitePieces & board.Kings & MASK_DCORNER);
 	int black_double_corner_kings = std::popcount(board.BlackPieces & board.Kings & MASK_DCORNER);
 
+	int white_piece_pst = 0;
+	int black_piece_pst = 0;
+	unsigned int wp = white_pieces, bp = black_pieces;
+	// Add up all the piece square table values
+	while (wp) {
+		white_piece_pst += WHITE_PIECE_PST[std::countr_zero(wp)];
+		wp &= wp - 1u;
+	}
+	while (bp) {
+		black_piece_pst += BLACK_PIECE_PST[std::countr_zero(bp)];
+		bp &= bp - 1u;
+	}
+
 	// Evaluate the position
-	result += maximizingPlayer ? (white_pieces - black_pieces) * PIECE_FACTOR : (black_pieces - white_pieces) * PIECE_FACTOR;
-	result += maximizingPlayer ? (white_kings - black_kings) * KING_FACTOR : (black_kings - white_kings) * KING_FACTOR;
-	result += maximizingPlayer ? (white_movers - black_movers) * MOVER_COUNT_FACTOR : (black_movers - white_movers) * MOVER_COUNT_FACTOR;
-	result += maximizingPlayer ? (white_promotion_candidates - black_promotion_candidates) * PROMOTION_CANDIDATES_FACTOR
-		: (black_promotion_candidates - white_promotion_candidates) * PROMOTION_CANDIDATES_FACTOR;
-	result += maximizingPlayer ? (white_double_corner_kings - black_double_corner_kings) * DOUBLE_CORNER_FACTOR
-		: (black_double_corner_kings - white_double_corner_kings) * DOUBLE_CORNER_FACTOR;
+	result += maximizingPlayer ? (white_pieces - black_pieces) * weights.PIECE_FACTOR : (black_pieces - white_pieces) * weights.PIECE_FACTOR;
+	result += maximizingPlayer ? (white_kings - black_kings) * weights.KING_FACTOR : (black_kings - white_kings) * weights.KING_FACTOR;
+	result += maximizingPlayer ? (white_movers - black_movers) * weights.MOVER_COUNT_FACTOR : (black_movers - white_movers) * weights.MOVER_COUNT_FACTOR;
+	result += maximizingPlayer ? (white_promotion_candidates - black_promotion_candidates) * weights.PROMOTION_CANDIDATES_FACTOR
+		: (black_promotion_candidates - white_promotion_candidates) * weights.PROMOTION_CANDIDATES_FACTOR;
+	result += maximizingPlayer ? (white_double_corner_kings - black_double_corner_kings) * weights.DOUBLE_CORNER_FACTOR
+		: (black_double_corner_kings - white_double_corner_kings) * weights.DOUBLE_CORNER_FACTOR;
+	result += maximizingPlayer ? (white_piece_pst - black_piece_pst) : (black_piece_pst - white_piece_pst);
 	return result;
 }
 // Runs the minimax algorithm for the current depth and player/board state
 int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhite, int takeOriginIndex, 
-	int alpha, int beta, bool isAfterNullMove) {
-	NodeCounter++;
+	int alpha, int beta, bool isAfterNullMove, std::vector<uint64_t>& history) {
 
 	// If the bot ran out of depth, finish the branch
 	if (depth == 0) {
@@ -204,8 +221,17 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 	// If the depth is above 0, hash the board
 	uint64_t hash = ComputeZobristHash(board, colour, takeOriginIndex);
 	size_t index = hash & (TT_SIZE - 1);
+	// Check if the position was repeated before
+	int repetitionCount = std::count(searchPathHistory.begin(), searchPathHistory.end(), hash);
+	// If it was, consider it a draw score
+	if (repetitionCount > 1) return 0;
 	// Check if there is a hit in the transposition table for the index
 	TTEntry& entry = transpositionTable[index];
+	int repetition = 1;
+	for (uint64_t pos : history) {
+		if (pos == hash) repetition++;
+		if (repetition >= 3) return 0;
+	}
 	if (entry.depth >= depth && entry.hash == hash) {
 		// There is a hit, check the type of score the entry has
 		switch (entry.bound) {
@@ -234,9 +260,10 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 		}
 	}
 	// Check if it is possible to do a run of Null-move pruning
-	if (!jumpers && !isAfterNullMove && takeOriginIndex == -1 && depth >= MIN_NULL_MOVE_DEPTH) {
+	int pieceCount = std::popcount(board.BlackPieces) + std::popcount(board.WhitePieces);
+	if (!jumpers && !isAfterNullMove && takeOriginIndex == -1 && depth >= MIN_NULL_MOVE_DEPTH && pieceCount > MIN_NULL_MOVE_PIECE_COUNT) {
 		int r = 2; // Reduction
-		int nullEval = Minimax(board, depth - 1 - r, !colour, maximizingIsWhite, takeOriginIndex, alpha, beta, true);
+		int nullEval = Minimax(board, depth - 1 - r, !colour, maximizingIsWhite, takeOriginIndex, alpha, beta, true, history);
 		// Check if we can cut off early with the null evaluation
 		bool isMaximizing = colour == maximizingIsWhite;
 		if (isMaximizing && nullEval >= beta) return nullEval;
@@ -273,20 +300,24 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 	if (killerMoves[depth][0].from != -1 && moveCanFit) {
 		auto iterator = std::find_if(legalMoves.begin(), legalMoves.end(), [&](const Move& mv) {
 			return mv.from == killerMoves[depth][0].from && mv.to == killerMoves[depth][0].to;
-			});
-		if (iterator != legalMoves.end()) std::iter_swap(
-			entry.hash == hash ? legalMoves.begin() + 1 : legalMoves.begin(),
-			iterator);
+		});
+		if (iterator != legalMoves.end()) {
+			std::iter_swap(
+				entry.hash == hash ? legalMoves.begin() + 1 : legalMoves.begin(),
+				iterator);
+		}
 	}
 	// Redo the check for the other move (1 position further)
 	moveCanFit = ((entry.hash == hash) + 1) < legalMoves.size();
 	if (killerMoves[depth][1].from != -1 && moveCanFit) {
 		auto iterator = std::find_if(legalMoves.begin(), legalMoves.end(), [&](const Move& mv) {
 			return mv.from == killerMoves[depth][1].from && mv.to == killerMoves[depth][1].to;
-			});
-		if (iterator != legalMoves.end()) std::iter_swap(
-			entry.hash == hash ? legalMoves.begin() + 2 : legalMoves.begin() + 1,
-			iterator);
+		});
+		if (iterator != legalMoves.end()) {
+			std::iter_swap(
+				entry.hash == hash ? legalMoves.begin() + 2 : legalMoves.begin() + 1,
+				iterator);
+		}
 	}
 	// If there are no legal moves, the maximizing player lost
 	if (legalMoves.empty()) return isMaximizing ? INT_MIN : INT_MAX;
@@ -303,6 +334,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 		// Make a copy of the current board and apply the move to it
 		BitboardSet nextBoard = board;
 		ApplyMoveOnBitboardSet(&nextBoard, &move);
+		uint64_t nextHash = ComputeZobristHash(nextBoard, !colour, takeOriginIndex);
 		// Does the same piece have captures available to continue the chain
 		bool continuesChain = false;
 		if (move.isCapture && !move.isCrown) {
@@ -313,7 +345,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 		int eval;
 		if (continuesChain) {
 			// Same colour and depth because the chain is continued
-			eval = Minimax(nextBoard, depth, colour, maximizingIsWhite, move.to, alpha, beta, false);
+			eval = Minimax(nextBoard, depth, colour, maximizingIsWhite, move.to, alpha, beta, false, history);
 		}
 		else {
 			// The turn passes to the other player
@@ -324,15 +356,19 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 			if (isReduced) {
 				int nullAlpha = isMaximizing ? alpha : (beta - 1);
 				int nullBeta = isMaximizing ? (alpha + 1) : beta;
+				searchPathHistory.push_back(nextHash);
 				int reducedEval = Minimax(nextBoard, searchDepth - 1, !colour, maximizingIsWhite,
-					takesOnly ? move.to : -1, nullAlpha, nullBeta, false);
+					takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+				searchPathHistory.pop_back();
 				bool hasEscaped = isMaximizing ? (reducedEval > alpha) : (reducedEval < beta);
 				// If the move has escaped the window, do regular PVS
 				if (!hasEscaped) eval = reducedEval;
 				else {
 					// Run the first search with a full window, any subsequent searches are done with a null window first
 					if (isFirstMove) {
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+						searchPathHistory.push_back(nextHash);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false, history);
+						searchPathHistory.pop_back();
 						isFirstMove = false;
 					}
 					else {
@@ -340,16 +376,25 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 							// The window is not narrow enough, run the search with a null window
 							int nullAlpha = isMaximizing ? alpha : (beta - 1);
 							int nullBeta = isMaximizing ? (alpha + 1) : beta;
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, nullAlpha, nullBeta, false);
+							searchPathHistory.push_back(nextHash);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+								takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+							searchPathHistory.pop_back();
 							// If the move was better than the first one, run a full search
 							bool isBetter = isMaximizing ? (eval > alpha) : (eval < beta);
 							if (isBetter) {
-								eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+								searchPathHistory.push_back(nextHash);
+								eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+									takesOnly ? move.to : -1, alpha, beta, false, history);
+								searchPathHistory.pop_back();
 							}
 						}
 						else {
 							// The window is already narrow, run a normal search
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+							searchPathHistory.push_back(nextHash);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+								takesOnly ? move.to : -1, alpha, beta, false, history);
+							searchPathHistory.pop_back();
 						}
 					}
 				}
@@ -358,7 +403,9 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 			else {
 				// Run the first search with a full window, any subsequent searches are done with a null window first
 				if (isFirstMove) {
-					eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+					searchPathHistory.push_back(nextHash);
+					eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false, history);
+					searchPathHistory.pop_back();
 					isFirstMove = false;
 				}
 				else {
@@ -366,16 +413,25 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 						// The window is not narrow enough, run the search with a null window
 						int nullAlpha = isMaximizing ? alpha : (beta - 1);
 						int nullBeta = isMaximizing ? (alpha + 1) : beta;
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, nullAlpha, nullBeta, false);
+						searchPathHistory.push_back(nextHash);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+							takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+						searchPathHistory.pop_back();
 						// If the move was better than the first one, run a full search
 						bool isBetter = isMaximizing ? (eval > alpha) : (eval < beta);
 						if (isBetter) {
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+							searchPathHistory.push_back(nextHash);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+								takesOnly ? move.to : -1, alpha, beta, false, history);
+							searchPathHistory.pop_back();
 						}
 					}
 					else {
 						// The window is already narrow, run a normal search
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false);
+						searchPathHistory.push_back(nextHash);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
+							takesOnly ? move.to : -1, alpha, beta, false, history);
+						searchPathHistory.pop_back();
 					}
 				}
 			}
@@ -424,10 +480,13 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 
 // Generate a move using the Minimax rule to find the best possible move for the bot with the given depth
 AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
-	bool botColour, bool isCaptureChain, int forcedOriginX, int forcedOriginY) {
-	NodeCounter = 0;
+	bool botColour, bool isCaptureChain, int forcedOriginX, int forcedOriginY, std::vector<uint64_t>& history) {
 	AppliedMove result = { -1, -1, -1, -1, -1, -1, 0, 0 };
 	Move chosenMove{};
+	// Make a copy of the recent history to use for repetition detection
+	auto start = history.size() < 5 ? history.begin() : history.end() - 5;
+	searchPathHistory = std::vector<uint64_t>(start, history.end());
+	searchPathHistory.reserve(128);
 	// Update the bitboards with the current board state and reset the killer moves array
 	bitboards.UpdateBitboards(board_state);
 	ResetKillerMoves();
@@ -450,8 +509,6 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 	}
 	// If there are no legal moves, the game is over
 	if (legalMoves.empty()) {
-		std::cout << std::endl;
-		std::cout << "The bot has lost. The game is over." << std::endl;
 		return result;
 	}
 
@@ -475,20 +532,20 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 
 			int score;
 			if (continuesChain) {
-				score = Minimax(nextBoard, currentDepth, botColour, botColour, moveCopy.to, windowAlpha, windowBeta, false);
+				score = Minimax(nextBoard, currentDepth, botColour, botColour, moveCopy.to, windowAlpha, windowBeta, false, history);
 			}
 			else {
 				// Run the first search with a full window, any subsequent searches are done with a null window first
 				if (isFirstMove) {
-					score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, windowAlpha, windowBeta, false);
+					score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, windowAlpha, windowBeta, false, history);
 					isFirstMove = false;
 				}
 				else {
 					// First, run the search with a null window
-					score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, highScore, highScore + 1, false);
+					score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, highScore, highScore + 1, false, history);
 					// If the null search shows that the move is better than our current best, run the search with a full window
 					if (score > highScore) {
-						score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, highScore, INT_MAX, false);
+						score = Minimax(nextBoard, currentDepth - 1, !botColour, botColour, -1, highScore, INT_MAX, false, history);
 					}
 				}
 			}
@@ -538,7 +595,7 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 	BitIndexToCoordinates(chosenMove.from, &sourceX, &sourceY);
 	BitIndexToCoordinates(chosenMove.to, &destinationX, &destinationY);
 	if(chosenMove.isCapture) BitIndexToCoordinates(chosenMove.capturedSquare, &captureX, &captureY);
-
+	
 	result = {
 		sourceX, sourceY,
 		destinationX, destinationY,
@@ -547,6 +604,5 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 		chosenMove.isCapture,
 		chosenMove.isCrown
 	};
-	std::cout << NodeCounter << std::endl;
 	return result;
 }
