@@ -29,5 +29,6 @@ extern MovementState mov;
 void ResetMovementState();
 void DrawPiece(Vector2 center, float size, bool isWhite, bool isKing);
 void DrawBoard(std::vector<Piece>* board_state, BoardLayout& board_layout, GameState& game);
+void DrawEval(float eval, BoardLayout& board_layout, bool playerIsWhite);
 MoveResult handleMovement(std::vector<Piece>* board_state, BoardLayout& board_layout, Vector2 mousePos, AppliedMove& lastMove);
 MoveResult ReadInput(std::vector<Piece>* board_state, BoardLayout& board_layout, GameState& game, std::vector<uint64_t>& history);

@@ -480,7 +480,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 
 // Generate a move using the Minimax rule to find the best possible move for the bot with the given depth
 AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
-	bool botColour, bool isCaptureChain, int forcedOriginX, int forcedOriginY, std::vector<uint64_t>& history) {
+	bool botColour, bool isCaptureChain, int forcedOriginX, int forcedOriginY, std::vector<uint64_t>& history, int& eval) {
 	AppliedMove result = { -1, -1, -1, -1, -1, -1, 0, 0 };
 	Move chosenMove{};
 	// Make a copy of the recent history to use for repetition detection
@@ -553,6 +553,7 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 			if (!choseMoveThisPass || score > highScore) {
 				bestMoveIndex = i;
 				highScore = score;
+				eval = score;
 				choseMoveThisPass = true;
 			}
 		}

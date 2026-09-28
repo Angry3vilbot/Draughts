@@ -78,7 +78,7 @@ void SoftResetAll(Bot& bot) {
 // Generate and apply the bot's move
 void DoBotMove(std::vector<Piece>* board_state, Bot& bot) {
 	AppliedMove botMove = bot.GenerateMove(board_state, game.depth, !game.playerColour,
-		game.isCaptureChain, game.chainOriginX, game.chainOriginY, history);
+		game.isCaptureChain, game.chainOriginX, game.chainOriginY, history, game.eval);
 	if (botMove.sourceX == -1) {
 		// The bot lost the game
 		game.status = game.playerColour ? 1 : -1;
@@ -136,8 +136,6 @@ void DoBotMove(std::vector<Piece>* board_state, Bot& bot) {
 	}
 	// Check if the player has legal moves available
 	CheckLoss(board_state, game.playerColour);
-	// If they do, check if the bot has legal moves available
-	if(game.status == 0) CheckLoss(board_state, !game.playerColour);
 }
 // Checks if the given colour lost the game. If one has, sets the game status accordingly.
 void CheckLoss(std::vector<Piece>* board_state, bool colour) {

@@ -1,6 +1,8 @@
 #include "GameRenderer.h"
 
 MovementState mov{};
+bool isEvalOn = false;
+bool shouldShowEvalTT = true;
 
 void ResetMovementState() {
 	mov.isDragging = false;
@@ -242,4 +244,59 @@ MoveResult ReadInput(std::vector<Piece>* board_state, BoardLayout& board_layout,
 		}
 	}
 	return moveResult;
+}
+// Draw the eval bar
+void DrawEvalBar(float eval, BoardLayout& board_layout, bool playerIsWhite) {
+	int evalW = GetScreenWidth() * 0.03;
+	int evalH = board_layout.boardSize;
+	int evalX = board_layout.boardX - evalW;
+	int evalY = board_layout.boardY;
+	Rectangle evalBar = { evalX, evalY, evalW, evalH };
+
+	float evalPart = evalH / 10;
+	float evalWhite = playerIsWhite ? evalPart * eval : evalPart * -eval;
+	float evalBlack = playerIsWhite ? evalPart * -eval : evalPart * eval;
+
+	float textSize = (GetScreenWidth() / 1920.0) * 14.0;
+	bool isBlackWinning = (!playerIsWhite && eval < 0.0) || (playerIsWhite && eval > 0.0);
+	bool isWhiteWinning = (playerIsWhite && eval < 0.0) || (!playerIsWhite && eval > 0.0);
+	const char* evalText = TextFormat("%02.02f", isWhiteWinning ? abs(eval) : -abs(eval));
+	const char* actualText = abs(eval) > 100000 ? "W" : evalText;
+	int evalTextX = evalX + (evalW / 2) - (MeasureText(actualText, textSize) / 2);
+	float blackEvalBarH = evalH / 2 + evalWhite;
+	if (blackEvalBarH > evalH) blackEvalBarH = evalH;
+	// Acts as the White part of the eval
+	DrawRectangleRec(evalBar, RAYWHITE);
+	// Black part of the eval
+	DrawRectangle(evalX, evalY, evalW, blackEvalBarH, BLACK);
+	DrawRectangleLinesEx(evalBar, 5, BLACK);
+	if (isBlackWinning || isWhiteWinning) {
+		int evalTextY = isBlackWinning ? (evalY + 18) : (evalY + evalH - 18);
+		DrawText(actualText, evalTextX, evalTextY, textSize, isBlackWinning ? WHITE : BLACK);
+	}
+}
+void DrawEval(float eval, BoardLayout& board_layout, bool playerIsWhite) {
+	// Draw eval bar toggle tooltip
+	if (shouldShowEvalTT) {
+		float textSize = (GetScreenWidth() / 1920.0) * 24.0;
+		Vector2 textSizeEx = MeasureTextEx(GetFontDefault(), "Press E to turn on the evaluation bar", textSize, 2.0);
+		Vector2 textPos = { board_layout.boardX - textSizeEx.y, GetScreenHeight() / 2 };
+
+		Vector2 textOrigin = { textSizeEx.x / 2, textSizeEx.y / 2 };
+		DrawTextPro(GetFontDefault(),
+			"Press E to turn on the evaluation bar",
+			textPos,
+			textOrigin,
+			-90,
+			textSize,
+			2,
+			BLACK);
+	}
+	// Draw the eval bar if it is turned on
+	if (isEvalOn) DrawEvalBar(eval, board_layout, playerIsWhite);
+	// Input handling
+	if (IsKeyPressed(KEY_E)) {
+		shouldShowEvalTT = false;
+		isEvalOn = !isEvalOn;
+	}
 }

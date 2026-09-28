@@ -51,6 +51,7 @@ int main() {
 		BeginDrawing();
 		// Setup the back buffer for drawing (clear color and depth buffers)
 		ClearBackground(RAYWHITE);
+		if(game.gameMode == 1) DrawEval((float)game.eval / 100, board_layout, game.playerColour);
 		DrawBoard(&board_state, board_layout, game);
 		if(game.status != 0) DrawResultScreen(game.status == 1, bot, started);
 		// end the frame and get ready for the next one (display frame, poll input, etc...)

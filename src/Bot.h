@@ -65,6 +65,6 @@ class Bot {
 	public:
 		Bot(std::vector<Piece>* board_state);
 		AppliedMove GenerateMove(std::vector<Piece>* board_state, int depth, bool isBotWhite,
-			bool isCaptureChain, int forcedOriginX, int forcedOriginY, std::vector<uint64_t>& history);
+			bool isCaptureChain, int forcedOriginX, int forcedOriginY, std::vector<uint64_t>& history, int& eval);
 		void ResetBot(std::vector<Piece>* board_state);
 };
