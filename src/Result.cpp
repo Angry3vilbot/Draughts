@@ -1,6 +1,6 @@
 #include "Result.h"
 
-void DrawResultScreen(bool whiteDidWin, Bot& bot, bool& started) {
+void DrawResultScreen(bool whiteDidWin, Bot& bot, bool& started, bool& appliedConfig) {
 	const char* resultStr = whiteDidWin ? "White Won" : "Black Won";
 	// Draw the overlay
 	DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), { 0, 0, 0, 100 });
@@ -10,7 +10,7 @@ void DrawResultScreen(bool whiteDidWin, Bot& bot, bool& started) {
 	// Draw Play Again button
 	DrawNewGameButton(bot);
 	// Draw Main Menu button
-	DrawMainMenuButton(bot, started);
+	DrawMainMenuButton(bot, started, appliedConfig);
 }
 
 void DrawNewGameButton(Bot& bot) {
@@ -34,7 +34,7 @@ void DrawNewGameButton(Bot& bot) {
 	}
 }
 
-void DrawMainMenuButton(Bot& bot, bool& started) {
+void DrawMainMenuButton(Bot& bot, bool& started, bool& appliedConfig) {
 	int btnWidth = 0.1 * GetScreenWidth(), btnHeight = 0.1 * GetScreenHeight();
 	int btnX = (GetScreenWidth() - btnWidth) / 2 - btnWidth;
 	int btnY = btnHeight * 6;
@@ -53,5 +53,6 @@ void DrawMainMenuButton(Bot& bot, bool& started) {
 		ResetBoardState();
 		ResetAll(bot);
 		started = false;
+		appliedConfig = false;
 	}
 }

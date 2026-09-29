@@ -53,25 +53,26 @@ int main() {
 		ClearBackground(RAYWHITE);
 		if(game.gameMode == 1) DrawEval((float)game.eval / 100, board_layout, game.playerColour);
 		DrawBoard(&board_state, board_layout, game);
-		if(game.status != 0) DrawResultScreen(game.status == 1, bot, started);
+		if (game.status != 0) {
+			DrawResultScreen(game.status == 1, bot, started, appliedConfig);
+			EndDrawing();
+			continue;
+		}
 		// end the frame and get ready for the next one (display frame, poll input, etc...)
 		EndDrawing();
-		if (game.status == 0)
-		{
-			if (game.playerTurn) {
+		if (game.playerTurn) {
+			MoveResult moveResult = ReadInput(&board_state, board_layout, game, history);
+			if (moveResult.moved) ResolveMoveOutcome(moveResult, &board_state);
+		}
+		else {
+			// Playing against the bot
+			if (settings.gameMode == 1) {
+				DoBotMove(&board_state, bot);
+			}
+			// Two Player Mode
+			else {
 				MoveResult moveResult = ReadInput(&board_state, board_layout, game, history);
 				if (moveResult.moved) ResolveMoveOutcome(moveResult, &board_state);
-			}
-			else {
-				// Playing against the bot
-				if (settings.gameMode == 1) {
-					DoBotMove(&board_state, bot);
-				}
-				// Two Player Mode
-				else {
-					MoveResult moveResult = ReadInput(&board_state, board_layout, game, history);
-					if (moveResult.moved) ResolveMoveOutcome(moveResult, &board_state);
-				}
 			}
 		}
 	}

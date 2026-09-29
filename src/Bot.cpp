@@ -334,13 +334,13 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 		// Make a copy of the current board and apply the move to it
 		BitboardSet nextBoard = board;
 		ApplyMoveOnBitboardSet(&nextBoard, &move);
-		uint64_t nextHash = ComputeZobristHash(nextBoard, !colour, takeOriginIndex);
 		// Does the same piece have captures available to continue the chain
 		bool continuesChain = false;
 		if (move.isCapture && !move.isCrown) {
 			unsigned int jumpsAfter = colour ? nextBoard.GetJumpersWhite() : nextBoard.GetJumpersBlack();
 			continuesChain = (jumpsAfter >> move.to) & 1;
 		}
+		uint64_t nextHash = continuesChain ? ComputeZobristHash(nextBoard, colour, move.to) : ComputeZobristHash(nextBoard, !colour, -1);
 		// Run minimax for the next move with the new position
 		int eval;
 		if (continuesChain) {
@@ -357,8 +357,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 				int nullAlpha = isMaximizing ? alpha : (beta - 1);
 				int nullBeta = isMaximizing ? (alpha + 1) : beta;
 				searchPathHistory.push_back(nextHash);
-				int reducedEval = Minimax(nextBoard, searchDepth - 1, !colour, maximizingIsWhite,
-					takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+				int reducedEval = Minimax(nextBoard, searchDepth - 1, !colour, maximizingIsWhite, -1, nullAlpha, nullBeta, false, history);
 				searchPathHistory.pop_back();
 				bool hasEscaped = isMaximizing ? (reducedEval > alpha) : (reducedEval < beta);
 				// If the move has escaped the window, do regular PVS
@@ -367,7 +366,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 					// Run the first search with a full window, any subsequent searches are done with a null window first
 					if (isFirstMove) {
 						searchPathHistory.push_back(nextHash);
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false, history);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 						searchPathHistory.pop_back();
 						isFirstMove = false;
 					}
@@ -377,23 +376,20 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 							int nullAlpha = isMaximizing ? alpha : (beta - 1);
 							int nullBeta = isMaximizing ? (alpha + 1) : beta;
 							searchPathHistory.push_back(nextHash);
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-								takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, nullAlpha, nullBeta, false, history);
 							searchPathHistory.pop_back();
 							// If the move was better than the first one, run a full search
 							bool isBetter = isMaximizing ? (eval > alpha) : (eval < beta);
 							if (isBetter) {
 								searchPathHistory.push_back(nextHash);
-								eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-									takesOnly ? move.to : -1, alpha, beta, false, history);
+								eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 								searchPathHistory.pop_back();
 							}
 						}
 						else {
 							// The window is already narrow, run a normal search
 							searchPathHistory.push_back(nextHash);
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-								takesOnly ? move.to : -1, alpha, beta, false, history);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 							searchPathHistory.pop_back();
 						}
 					}
@@ -404,7 +400,7 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 				// Run the first search with a full window, any subsequent searches are done with a null window first
 				if (isFirstMove) {
 					searchPathHistory.push_back(nextHash);
-					eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, takesOnly ? move.to : -1, alpha, beta, false, history);
+					eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 					searchPathHistory.pop_back();
 					isFirstMove = false;
 				}
@@ -414,23 +410,20 @@ int Bot::Minimax(BitboardSet board, int depth, bool colour, bool maximizingIsWhi
 						int nullAlpha = isMaximizing ? alpha : (beta - 1);
 						int nullBeta = isMaximizing ? (alpha + 1) : beta;
 						searchPathHistory.push_back(nextHash);
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-							takesOnly ? move.to : -1, nullAlpha, nullBeta, false, history);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, nullAlpha, nullBeta, false, history);
 						searchPathHistory.pop_back();
 						// If the move was better than the first one, run a full search
 						bool isBetter = isMaximizing ? (eval > alpha) : (eval < beta);
 						if (isBetter) {
 							searchPathHistory.push_back(nextHash);
-							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-								takesOnly ? move.to : -1, alpha, beta, false, history);
+							eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 							searchPathHistory.pop_back();
 						}
 					}
 					else {
 						// The window is already narrow, run a normal search
 						searchPathHistory.push_back(nextHash);
-						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite,
-							takesOnly ? move.to : -1, alpha, beta, false, history);
+						eval = Minimax(nextBoard, depth - 1, !colour, maximizingIsWhite, -1, alpha, beta, false, history);
 						searchPathHistory.pop_back();
 					}
 				}
@@ -553,7 +546,6 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 			if (!choseMoveThisPass || score > highScore) {
 				bestMoveIndex = i;
 				highScore = score;
-				eval = score;
 				choseMoveThisPass = true;
 			}
 		}
@@ -588,6 +580,7 @@ AppliedMove Bot::GenerateMove(std::vector<Piece>* board_state, int depth,
 
 		chosenMove = legalMoves[bestMoveIndex];
 		previousScore = highScore;
+		eval = highScore;
 		// Move this pass's best move to the front
 		std::swap(legalMoves[0], legalMoves[bestMoveIndex]);
 	}
