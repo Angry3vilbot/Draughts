@@ -5,8 +5,8 @@ void DrawResultScreen(bool whiteDidWin, Bot& bot, bool& started, bool& appliedCo
 	// Draw the overlay
 	DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), { 0, 0, 0, 100 });
 	// Draw the text
-	DrawText("GAME OVER", (GetScreenWidth() - MeasureText("GAME OVER", 64)) / 2, GetScreenHeight() * 0.2, 64, BLACK);
-	DrawText(resultStr, (GetScreenWidth() - MeasureText(resultStr, 48)) / 2, GetScreenHeight() * 0.4, 48, BLACK);
+	DrawText("GAME OVER", (GetScreenWidth() - MeasureText("GAME OVER", 64)) / 2, GetScreenHeight() * 0.2, 64, RAYWHITE);
+	DrawText(resultStr, (GetScreenWidth() - MeasureText(resultStr, 48)) / 2, GetScreenHeight() * 0.4, 48, RAYWHITE);
 	// Draw Play Again button
 	DrawNewGameButton(bot);
 	// Draw Main Menu button

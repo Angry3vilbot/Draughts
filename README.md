@@ -10,6 +10,7 @@ A game of English Draughts, as well as an engine, made in C++ with Raylib
 - Minimax for move search and selection
 - Alpha-Beta Pruning
 - Hand-crafted heuristics-based evaluation (HCE)
+- Bitboard-based position storage
 - Move Sorting
 - Iterative Deepening
 - Transposition Table using Zobrist Hashing
